@@ -46,9 +46,11 @@ export default {
     const b=await body(request);if(!b||typeof b.title!=='string'||b.title.trim().length<3||b.title.length>160)return json({error:'Title must be 3–160 characters'},400);
     const needs=b.needs;
     if(!Array.isArray(needs)||needs.length<1||needs.length>10||needs.some(n=>!n||typeof n.item_name!=='string'||!n.item_name.trim()||n.item_name.length>120||!Number.isInteger(n.quantity)||n.quantity<1||n.quantity>10000||typeof n.details!=='string'||n.details.length>1000))return json({error:'Enter 1–10 needs, each with an item or collaborator name and quantity (1–10000)'},400);
+    const needs=b.needs;if(!Array.isArray(needs)||needs.length<1||needs.length>10||needs.some(n=>!n||typeof n.item_name!=='string'||!n.item_name.trim()||n.item_name.length>120||!Number.isInteger(n.quantity)||n.quantity<1||n.quantity>10000||typeof n.details!=='string'||n.details.length>1000))return json({error:'Enter 1–10 requirements with a name and quantity'},400);
     const mode=['Local','Remote','Hybrid'].includes(b.collaboration_mode)?b.collaboration_mode:'Hybrid';
     const id=crypto.randomUUID();
     await env.DB.prepare('INSERT INTO projects(id,owner_clerk_id,title,description,category,location,collaboration_mode) VALUES(?,?,?,?,?,?,?)').bind(id,user,clean(b.title,160),clean(b.description,5000),clean(b.category,80)||'Other',clean(b.location,160),mode).run();
+    for(let i=0;i<needs.length;i++)await env.DB.prepare('INSERT INTO project_needs(id,project_id,position,item_name,quantity,details) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),id,i+1,clean(needs[i].item_name,120),needs[i].quantity,clean(needs[i].details,1000)).run();
     for(let i=0;i<needs.length;i++)await env.DB.prepare('INSERT INTO project_needs(id,project_id,position,item_name,quantity,details) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),id,i+1,clean(needs[i].item_name,120),needs[i].quantity,clean(needs[i].details,1000)).run();
     return json({id},201);
    }
