@@ -1,11 +1,15 @@
 // Cloud Collabo API foundation. D1 binding: DB. Clerk JWT verification via JWKS.
-const issuer = 'https://clerk.cloudcollabo.com';
+const productionIssuer = 'https://clerk.cloudcollabo.com';
+const developmentIssuer = 'https://splendid-goblin-9695.clerk.accounts.dev';
 const json = (value,status=200) => new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 function base64url(value) {
  const s=value.replace(/-/g,'+').replace(/_/g,'/');
  return Uint8Array.from(atob(s.padEnd(Math.ceil(s.length/4)*4,'=')),c=>c.charCodeAt(0));
 }
-async function identity(request) {
+async function identity(request, env) {
+ const issuer = env.CLERK_ISSUER || productionIssuer;
+ // Reject unrecognized issuers even if an environment variable is misconfigured.
+ if(issuer !== productionIssuer && issuer !== developmentIssuer) return null;
  const token=/^Bearer (.+)$/i.exec(request.headers.get('authorization')||'')?.[1];
  if(!token) return null;
  const parts=token.split('.'); if(parts.length!==3) return null;
@@ -31,7 +35,7 @@ export default {
   if(!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
   if(!env.DB) return json({error:'Database not configured'},503);
   if(url.pathname==='/api/health'&&request.method==='GET') return json({status:'ok'});
-  const user=await identity(request);
+  const user=await identity(request,env);
   if(!user) return json({error:'Sign in required'},401);
   try {
    if(url.pathname==='/api/projects'&&request.method==='GET'){
