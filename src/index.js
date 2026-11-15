@@ -88,8 +88,12 @@ export default {
    if(needsRoute&&request.method==='GET'){
     const p=await env.DB.prepare('SELECT id FROM projects WHERE id=?').bind(needsRoute[1]).first();
     if(!p)return json({error:'Project not found'},404);
-    const needs=await env.DB.prepare("SELECT n.id,n.item_name,n.quantity,n.details,COALESCE((SELECT SUM(a.offered_quantity) FROM role_applications a WHERE a.need_id=n.id AND a.status='approved'),0) AS approved FROM project_needs n WHERE n.project_id=? ORDER BY n.position").bind(needsRoute[1]).all();
-    return json({needs:needs.results});
+    const tables=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('project_needs','role_applications')").all();
+    const names=new Set(tables.results.map(t=>t.name));
+    if(!names.has('project_needs'))return json({needs:[],requirements_available:false});
+    const sql=names.has('role_applications')?"SELECT n.id,n.item_name,n.quantity,n.details,COALESCE((SELECT SUM(a.offered_quantity) FROM role_applications a WHERE a.need_id=n.id AND a.status='approved'),0) AS approved FROM project_needs n WHERE n.project_id=? ORDER BY n.position":"SELECT n.id,n.item_name,n.quantity,n.details,0 AS approved FROM project_needs n WHERE n.project_id=? ORDER BY n.position";
+    const needs=await env.DB.prepare(sql).bind(needsRoute[1]).all();
+    return json({needs:needs.results,requirements_available:true});
    }
    const rolesRoute=/^\/api\/projects\/([a-f0-9-]{36})\/role-applications$/.exec(url.pathname);
    if(rolesRoute&&request.method==='POST'){
@@ -109,6 +113,8 @@ export default {
     const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(rolesRoute[1]).first();
     if(!p)return json({error:'Project not found'},404);
     const owner=p.owner_clerk_id===user;
+    const ready=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('role_applications','project_needs')").all();
+    if(ready.results.length<2)return json({applications:[],is_owner:owner,applications_available:false});
     const rows=await env.DB.prepare("SELECT a.id,a.need_id,n.item_name,a.applicant_clerk_id,a.experience,a.offered_quantity,a.rate_amount,a.currency,a.rate_period,a.message,a.status,a.created_at FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=? AND (a.applicant_clerk_id=? OR ?=1) ORDER BY a.created_at DESC").bind(rolesRoute[1],user,owner?1:0).all();
     return json({applications:rows.results,is_owner:owner});
    }
