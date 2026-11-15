@@ -82,7 +82,10 @@ export default {
     const lifecycle=tables.has('project_lifecycle')?"COALESCE(l.stage,CASE WHEN p.status='closed' THEN 'closed' ELSE 'posted' END)":"CASE WHEN p.status='closed' THEN 'closed' ELSE 'posted' END";
     const dispute=tables.has('collaboration_disputes')?"EXISTS(SELECT 1 FROM collaboration_disputes d WHERE d.application_id=a.id AND d.status='open')":"0";
     const join=tables.has('project_lifecycle')?'LEFT JOIN project_lifecycle l ON l.project_id=p.id ':'';
-    const sql="SELECT a.id AS application_id,a.project_id,a.status AS application_status,a.created_at AS applied_at,p.title,p.description,p.category,p.location,p.status AS project_status,"+lifecycle+" AS lifecycle_stage,"+dispute+" AS is_disputed FROM role_applications a JOIN projects p ON p.id=a.project_id "+join+"WHERE a.applicant_clerk_id=? ORDER BY a.created_at DESC LIMIT 200";
+    const needsAvailable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_needs'").first();
+    const roleFields=needsAvailable?"n.item_name AS role_name,n.quantity AS role_quantity,":"NULL AS role_name,NULL AS role_quantity,";
+    const roleJoin=needsAvailable?"LEFT JOIN project_needs n ON n.id=a.need_id AND n.project_id=a.project_id ":"";
+    const sql="SELECT a.id AS application_id,a.project_id,a.status AS application_status,a.created_at AS applied_at,a.offered_quantity,"+roleFields+"p.title,p.description,p.category,p.location,p.status AS project_status,"+lifecycle+" AS lifecycle_stage,"+dispute+" AS is_disputed FROM role_applications a JOIN projects p ON p.id=a.project_id "+roleJoin+join+"WHERE a.applicant_clerk_id=? ORDER BY a.created_at DESC LIMIT 200";
     const rows=await env.DB.prepare(sql).bind(user).all();
     return json({collaborations:rows.results,disputes_available:tables.has('collaboration_disputes')});
    }
