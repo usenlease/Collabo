@@ -26,6 +26,7 @@
     notice('Sign-in setup error (' + stage + '): ' + (detail || 'Unknown error') + '. Check Clerk production domain DNS and allowed origins.');
   }
   window.cloudCollaboIsSignedIn = () => !!clerk?.user;
+  window.cloudCollaboGetToken = async () => clerk?.session ? await clerk.session.getToken() : null;
   window.cloudCollaboGetToken = async () => clerk?.session ? clerk.session.getToken() : null;
   window.cloudCollaboSignIn = async () => {
     if (!clerk) {
@@ -47,7 +48,13 @@
       refresh();
     } catch (error) { failure('signing out', error); }
   };
+  let lastUserId = undefined;
   function refresh() {
+    const userId = clerk?.user?.id || null;
+    if (userId !== lastUserId) {
+      lastUserId = userId;
+      window.dispatchEvent(new Event('cloudcollabo-auth-changed'));
+    }
     if (!button) return;
     window.dispatchEvent(new Event('cloudcollabo-auth-changed'));
     if (clerk.user) {
