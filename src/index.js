@@ -39,8 +39,22 @@ export default {
   if(!user) return json({error:'Sign in required'},401);
   try {
    if(url.pathname==='/api/my-projects'&&request.method==='GET'){
-    const rows=await env.DB.prepare("SELECT id,title,description,category,location,collaboration_mode,status,created_at,updated_at FROM projects WHERE owner_clerk_id=? ORDER BY created_at DESC LIMIT 200").bind(user).all();
-    return json({projects:rows.results});
+    const lifecycleTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_lifecycle'").first();
+    const sql=lifecycleTable?"SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.status,p.created_at,p.updated_at,COALESCE(l.stage,CASE WHEN p.status='closed' THEN 'closed' ELSE 'posted' END) AS lifecycle_stage FROM projects p LEFT JOIN project_lifecycle l ON l.project_id=p.id WHERE p.owner_clerk_id=? ORDER BY p.created_at DESC LIMIT 200":"SELECT id,title,description,category,location,collaboration_mode,status,created_at,updated_at,CASE WHEN status='closed' THEN 'closed' ELSE 'posted' END AS lifecycle_stage FROM projects WHERE owner_clerk_id=? ORDER BY created_at DESC LIMIT 200";
+    const rows=await env.DB.prepare(sql).bind(user).all();
+    return json({projects:rows.results,lifecycle_editable:!!lifecycleTable});
+   }
+   const stageRoute=/^\/api\/projects\/([a-f0-9-]{36})\/lifecycle$/.exec(url.pathname);
+   if(stageRoute&&request.method==='PATCH'){
+    const owner=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(stageRoute[1]).first();
+    if(!owner)return json({error:'Project not found'},404);
+    if(owner.owner_clerk_id!==user)return json({error:'Only the Initiator can change the project stage'},403);
+    const b=await body(request);
+    if(!['posted','open','ongoing','closed'].includes(b?.stage))return json({error:'Invalid project stage'},400);
+    const table=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_lifecycle'").first();
+    if(!table)return json({error:'Project stage updates are being configured'},503);
+    await env.DB.prepare("INSERT INTO project_lifecycle(project_id,stage) VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET stage=excluded.stage,updated_at=datetime('now')").bind(stageRoute[1],b.stage).run();
+    return json({updated:true,stage:b.stage});
    }
    if(url.pathname==='/api/projects'&&request.method==='GET'){
     const rows=await env.DB.prepare("SELECT id,title,description,category,location,collaboration_mode,status,created_at FROM projects WHERE status='open' ORDER BY created_at DESC LIMIT 100").all();
