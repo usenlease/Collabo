@@ -118,6 +118,7 @@ export default {
     const b=await body(request);if(!b||typeof b.title!=='string'||b.title.trim().length<3||b.title.length>160)return json({error:'Title must be 3–160 characters'},400);
     const needs=Array.isArray(b.needs)?b.needs:[];if(needs.length<1||needs.length>10||needs.some(n=>!n||!clean(n.item_name,120)||!Number.isInteger(n.quantity)||n.quantity<1||n.quantity>10000))return json({error:'Add 1–10 collaborator or resource requirements'},400);
     const mode=['Local','Remote','Hybrid'].includes(b.collaboration_mode)?b.collaboration_mode:'Hybrid';
+    if(Number(b.picture_count||0)>0&&!env.PROJECT_PICTURES)return json({error:'Picture storage is not configured. Publishing was stopped before creating another incomplete project.',code:'PICTURE_STORAGE_UNAVAILABLE'},503);
     const needsTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_needs'").first();
     if(!needsTable)return json({error:'Publishing is temporarily unavailable: the project requirements database needs setup. Your draft is still on this device. Please try again after the database repair.',code:'PROJECT_NEEDS_SETUP_REQUIRED'},503);
     const id=/^[a-f0-9-]{36}$/.test(b.client_project_id||'')?b.client_project_id:crypto.randomUUID();
