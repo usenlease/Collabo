@@ -81,6 +81,44 @@ export default {
     const result=await env.DB.prepare('SELECT id,applicant_clerk_id,message,status,created_at FROM applications WHERE project_id=? ORDER BY created_at DESC LIMIT 100').bind(apply[1]).all();
     return json({applications:result.results});
    }
+   // Ratings are allowed only between a project's initiator and an applicant.
+   // Published aggregates never reveal Clerk user identifiers.
+   const profile=/^\/api\/profiles\/([A-Za-z0-9_-]{1,128})\/ratings$/.exec(url.pathname);
+   if(profile&&request.method==='GET'){
+    const summary=await env.DB.prepare('SELECT COUNT(*) AS count, ROUND(AVG(stars),1) AS average FROM member_ratings WHERE rated_clerk_id=?').bind(profile[1]).first();
+    const recent=await env.DB.prepare('SELECT stars,comment,created_at FROM member_ratings WHERE rated_clerk_id=? ORDER BY created_at DESC LIMIT 30').bind(profile[1]).all();
+    return json({rating:{count:summary.count,average:summary.average,reviews:recent.results}});
+   }
+   const rating=/^\/api\/projects\/([a-f0-9-]{36})\/ratings$/.exec(url.pathname);
+   if(rating&&request.method==='POST'){
+    const b=await body(request);
+    if(!Number.isInteger(b?.stars)||b.stars<1||b.stars>5)return json({error:'Select 1 to 5 stars'},400);
+    const project=await env.DB.prepare('SELECT owner_clerk_id,status FROM projects WHERE id=?').bind(rating[1]).first();
+    if(!project)return json({error:'Project not found'},404);
+    if(project.status!=='closed')return json({error:'Ratings are available only after a project is closed'},409);
+    const target=clean(b.target,128);
+    if(!target||target===user)return json({error:'Invalid rating recipient'},400);
+    const participant=await env.DB.prepare('SELECT id FROM applications WHERE project_id=? AND applicant_clerk_id=?').bind(rating[1],project.owner_clerk_id===user?target:user).first();
+    if(!participant||!(project.owner_clerk_id===user||project.owner_clerk_id===target))return json({error:'Only project initiators and applicants may rate each other'},403);
+    const exists=await env.DB.prepare('SELECT id FROM member_ratings WHERE project_id=? AND rater_clerk_id=? AND rated_clerk_id=?').bind(rating[1],user,target).first();
+    if(exists)return json({error:'You already rated this participant for this project'},409);
+    await env.DB.prepare('INSERT INTO member_ratings(id,project_id,rater_clerk_id,rated_clerk_id,stars,comment) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),rating[1],user,target,b.stars,clean(b.comment,500)).run();
+    return json({submitted:true},201);
+   }
+   const applicants=/^\/api\/projects\/([a-f0-9-]{36})\/participants$/.exec(url.pathname);
+   if(applicants&&request.method==='GET'){
+    const p=await env.DB.prepare('SELECT owner_clerk_id,status FROM projects WHERE id=?').bind(applicants[1]).first();
+    if(!p)return json({error:'Project not found'},404);
+    const myApplication=await env.DB.prepare('SELECT id FROM applications WHERE project_id=? AND applicant_clerk_id=?').bind(applicants[1],user).first();
+    if(p.owner_clerk_id!==user&&!myApplication)return json({error:'Forbidden'},403);
+    const result=await env.DB.prepare('SELECT applicant_clerk_id AS id,status FROM applications WHERE project_id=?').bind(applicants[1]).all();
+    const participants=p.owner_clerk_id===user?result.results.map(a=>({id:a.id,role:'Collaborator',status:a.status})): [{id:p.owner_clerk_id,role:'Initiator'}];
+    for(const person of participants){
+     const row=await env.DB.prepare('SELECT COUNT(*) AS count,ROUND(AVG(stars),1) AS average FROM member_ratings WHERE rated_clerk_id=?').bind(person.id).first();
+     person.rating={count:row.count,average:row.average};
+    }
+    return json({participants,closed:p.status==='closed'});
+   }
    return json({error:'Not found'},404);
   }catch(e){console.error('API failure',e);return json({error:'Server error'},500)}
  }
