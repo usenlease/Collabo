@@ -5,6 +5,7 @@
   const button = document.getElementById('sign');
   const frontend = atob(key.substring(key.indexOf('_', 3) + 1)).replace(/\$$/, '');
   let clerk = null, loading = true, pending = false;
+  let initialized = false;
   function notice(message) {
     let el = document.getElementById('clerk-auth-notice');
     if (!el) {
@@ -50,10 +51,17 @@
     }
   }
   async function initialize() {
+    if (initialized) return;
+    initialized = true;
     try {
       if (!window.Clerk) throw new Error('Clerk script did not expose window.Clerk');
       clerk = window.Clerk;
-      await clerk.load({ loadUi: true });
+      // Load the full browser bundle, including Clerk's sign-in/profile UI.
+      await clerk.load();
+      if (typeof clerk.openSignIn !== 'function') {
+        throw new Error('Clerk UI components are unavailable; check the browser bundle');
+      }
+      document.getElementById('clerk-auth-notice')?.remove();
       loading = false;
       refresh();
       clerk.addListener(refresh);
@@ -64,7 +72,7 @@
       failure('initialization', error);
     }
   }
-  function loadScript(src, fallback) {
+  function loadScript(src) {
     const s = document.createElement('script');
     s.async = true;
     s.crossOrigin = 'anonymous';
@@ -73,11 +81,12 @@
     s.onload = initialize;
     s.onerror = () => {
       s.remove();
-      if (fallback) loadScript(fallback, null);
-      else { loading = false; failure('script loading', new Error('Clerk JavaScript could not load from ' + frontend + ' or the CDN')); }
+      loading = false;
+      failure('script loading', new Error('Clerk browser bundle could not load from ' + frontend));
     };
     document.head.appendChild(s);
   }
-  loadScript('https://' + frontend + '/npm/@clerk/clerk-js@6/dist/clerk.browser.js',
-             'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@6/dist/clerk.browser.js');
+  // Use Clerk's first-party production frontend and current full UI browser bundle.
+  // Do not fall back to a generic CDN bundle that may lack the hosted UI components.
+  loadScript('https://' + frontend + '/npm/@clerk/clerk-js@latest/dist/clerk.browser.js');
 })();
