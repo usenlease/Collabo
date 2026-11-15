@@ -53,7 +53,7 @@
     try {
       if (!window.Clerk) throw new Error('Clerk script did not expose window.Clerk');
       clerk = window.Clerk;
-      await clerk.load();
+      await clerk.load({ loadUi: true });
       loading = false;
       refresh();
       clerk.addListener(refresh);
