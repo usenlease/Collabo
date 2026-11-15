@@ -136,7 +136,7 @@ export default {
     return json({updated:true,stage:b.stage});
    }
    if(url.pathname==='/api/projects'&&request.method==='GET'){
-    const rows=await env.DB.prepare("SELECT id,title,description,category,location,collaboration_mode,status,created_at FROM projects WHERE status='open' ORDER BY created_at DESC LIMIT 100").all();
+    const rows=await env.DB.prepare("SELECT id,title,description,category,location,collaboration_mode,status,created_at,CASE WHEN owner_clerk_id=? THEN 1 ELSE 0 END AS is_owner FROM projects WHERE status='open' ORDER BY created_at DESC LIMIT 100").bind(user).all();
     return json({projects:rows.results});
    }
    if(url.pathname==='/api/projects'&&request.method==='POST'){
