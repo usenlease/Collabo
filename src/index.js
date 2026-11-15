@@ -78,8 +78,8 @@ export default {
     const existing=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('role_applications','project_needs','project_team_messages','project_lifecycle','collaboration_disputes','applications','milestones')").all();
     const tables=new Set(existing.results.map(r=>r.name));
     if(tables.has('role_applications')){
-     const accepted=await env.DB.prepare("SELECT id FROM role_applications WHERE project_id=? AND status='approved' LIMIT 1").bind(id).first();
-     if(accepted)return json({error:'This project already has an approved collaborator and cannot be deleted'},409);
+     const committed=await env.DB.prepare("SELECT id FROM role_applications WHERE project_id=? LIMIT 1").bind(id).first();
+     if(committed)return json({error:'This project has a collaborator application or commitment and cannot be deleted. You may pause the project instead.',code:'COLLABORATOR_COMMITTED'},409);
     }
     if(tables.has('applications')){
      const legacy=await env.DB.prepare("SELECT id FROM applications WHERE project_id=? LIMIT 1").bind(id).first();
