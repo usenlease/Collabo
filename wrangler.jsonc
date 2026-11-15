@@ -15,7 +15,8 @@
     {
       "binding": "DB",
       "database_name": "collabodb",
-      "database_id": "8a6b6dc0-c632-4adc-86a8-4477e602b20d"
+      "database_id": "8a6b6dc0-c632-4adc-86a8-4477e602b20d",
+      "preview_database_id": "8efe01be-c2bc-415b-ba8c-b0a2844a18ed"
     }
   ]
 }
