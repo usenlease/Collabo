@@ -23,6 +23,7 @@
     notice('Sign-in setup error (' + stage + '): ' + (detail || 'Unknown error') + '. Check Clerk production domain DNS and allowed origins.');
   }
   window.cloudCollaboIsSignedIn = () => !!clerk?.user;
+  window.cloudCollaboGetToken = async () => clerk?.session ? clerk.session.getToken() : null;
   window.cloudCollaboSignIn = async () => {
     if (!clerk) {
       if (loading) { pending = true; notice('Connecting to secure sign-in…'); }
