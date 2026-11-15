@@ -46,6 +46,7 @@
   };
   function refresh() {
     if (!button) return;
+    window.dispatchEvent(new Event('cloudcollabo-auth-changed'));
     if (clerk.user) {
       button.textContent = 'My account';
       let logout = document.getElementById('sign-out');
