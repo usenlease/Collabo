@@ -18,9 +18,14 @@
     el.textContent = message;
   }
   window.cloudCollaboSignIn = async function () {
-    if (!clerk) { notice('Registration is initializing. Please try again shortly.'); return; }
-    if (clerk.user) { clerk.openUserProfile(); return; }
-    clerk.openSignIn({ afterSignInUrl: window.location.origin + '/#home' });
+    try {
+      if (!clerk) { notice('Sign-in cannot open because Clerk has not loaded. Check the authentication configuration and refresh.'); return; }
+      if (clerk.user) { await clerk.openUserProfile(); return; }
+      await clerk.openSignIn();
+    } catch (error) {
+      console.error('Cloud Collabo sign-in error:', error);
+      notice('Sign-in failed to open: ' + (error?.message || 'Clerk authentication error'));
+    }
   };
   async function start() {
     try {
@@ -46,10 +51,11 @@
           clerk.addListener(update);
           // Sign-up is available within Clerk's hosted sign-in modal.
         } catch (error) {
-          notice('Secure registration is temporarily unavailable. Please try again later.');
+          console.error('Clerk initialization failed:', error);
+          notice('Clerk initialization failed: ' + (error?.message || 'Unknown error'));
         }
       };
-      script.onerror = function () { notice('Secure registration could not load. Please try again later.'); };
+      script.onerror = function () { notice('Clerk sign-in script failed to load. Check the Clerk publishable key and permitted domains.'); };
       document.head.appendChild(script);
     } catch (error) { notice('Secure registration configuration is unavailable.'); }
   }
