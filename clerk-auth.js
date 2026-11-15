@@ -6,6 +6,7 @@
   const publishableKey = 'pk_test_dGFsZW50ZWQtbWF5Zmx5LTIxNzYuY2xlcmsuYWNjb3VudHMuZGV2JA';
   const signButton = document.getElementById('sign');
   let clerk;
+  window.cloudCollaboIsSignedIn = function () { return Boolean(clerk && clerk.user); };
   function notice(message) {
     let el = document.getElementById('clerk-auth-notice');
     if (!el) {
@@ -40,11 +41,17 @@
           if (!clerk) throw new Error('Clerk SDK did not initialize');
           await clerk.load();
           function update() {
+            if (clerk.user && window.cloudCollaboPendingPage) {
+              const page = window.cloudCollaboPendingPage;
+              window.cloudCollaboPendingPage = null;
+              location.hash = page;
+            }
             if (clerk.user) {
               signButton.textContent = 'My account';
               signButton.onclick = function (event) { event.preventDefault(); clerk.openUserProfile(); };
             } else {
               signButton.textContent = 'Sign in';
+              if (location.hash && location.hash !== '#home') { location.hash = 'home'; }
             }
           }
           update();
