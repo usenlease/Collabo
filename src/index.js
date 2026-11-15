@@ -38,6 +38,10 @@ export default {
   const user=await identity(request,env);
   if(!user) return json({error:'Sign in required'},401);
   try {
+   if(url.pathname==='/api/my-projects'&&request.method==='GET'){
+    const rows=await env.DB.prepare("SELECT id,title,description,category,location,collaboration_mode,status,created_at,updated_at FROM projects WHERE owner_clerk_id=? ORDER BY created_at DESC LIMIT 200").bind(user).all();
+    return json({projects:rows.results});
+   }
    if(url.pathname==='/api/projects'&&request.method==='GET'){
     const rows=await env.DB.prepare("SELECT id,title,description,category,location,collaboration_mode,status,created_at FROM projects WHERE status='open' ORDER BY created_at DESC LIMIT 100").all();
     return json({projects:rows.results});
