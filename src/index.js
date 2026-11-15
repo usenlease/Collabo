@@ -139,6 +139,21 @@ export default {
     const needs=await env.DB.prepare(sql).bind(needsRoute[1]).all();
     return json({needs:needs.results,requirements_available:true});
    }
+   const addNeedsRoute=/^\/api\/projects\/([a-f0-9-]{36})\/needs$/.exec(url.pathname);
+   if(addNeedsRoute&&request.method==='POST'){
+    const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(addNeedsRoute[1]).first();
+    if(!p)return json({error:'Project not found'},404);
+    if(p.owner_clerk_id!==user)return json({error:'Only the Initiator can restore roles'},403);
+    const b=await body(request);
+    const needs=Array.isArray(b?.needs)?b.needs:[];
+    if(!needs.length||needs.length>10||needs.some(n=>!n||!clean(n.item_name,120)||!Number.isInteger(n.quantity)||n.quantity<1||n.quantity>10000))return json({error:'Enter 1–10 valid roles and quantities'},400);
+    const table=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_needs'").first();
+    if(!table)return json({error:'Role database setup is incomplete'},503);
+    const existing=await env.DB.prepare('SELECT COUNT(*) AS count FROM project_needs WHERE project_id=?').bind(addNeedsRoute[1]).first();
+    if(existing.count>0)return json({error:'This project already has saved roles; existing roles were not changed'},409);
+    await env.DB.batch(needs.map((n,i)=>env.DB.prepare('INSERT INTO project_needs(id,project_id,position,item_name,quantity,details) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),addNeedsRoute[1],i+1,clean(n.item_name,120),n.quantity,clean(n.details,1000))));
+    return json({saved:true,role_count:needs.length},201);
+   }
    const rolesRoute=/^\/api\/projects\/([a-f0-9-]{36})\/role-applications$/.exec(url.pathname);
    if(rolesRoute&&request.method==='POST'){
     const p=await env.DB.prepare('SELECT owner_clerk_id,status FROM projects WHERE id=?').bind(rolesRoute[1]).first();
