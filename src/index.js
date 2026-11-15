@@ -142,9 +142,13 @@ export default {
     const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(chat[1]).first();
     if(!p)return json({error:'Project not found'},404);
     if(p.owner_clerk_id!==user){
+     const roleTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='role_applications'").first();
+     if(!roleTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
      const member=await env.DB.prepare("SELECT id FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(chat[1],user).first();
      if(!member)return json({error:'Only approved collaborators can enter team chat'},403);
     }
+    const chatTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_team_messages'").first();
+    if(!chatTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
     if(request.method==='GET'){
      const rows=await env.DB.prepare('SELECT id,sender_clerk_id,body,created_at FROM project_team_messages WHERE project_id=? ORDER BY created_at DESC LIMIT 100').bind(chat[1]).all();
      return json({messages:rows.results.reverse()});
