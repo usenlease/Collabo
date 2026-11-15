@@ -45,15 +45,19 @@ export default {
    if(url.pathname==='/api/projects'&&request.method==='POST'){
     const b=await body(request);if(!b||typeof b.title!=='string'||b.title.trim().length<3||b.title.length>160)return json({error:'Title must be 3–160 characters'},400);
     const mode=['Local','Remote','Hybrid'].includes(b.collaboration_mode)?b.collaboration_mode:'Hybrid';
+    const slots=Array.isArray(b.collaborators)?b.collaborators:[];
+    if(slots.length<1||slots.length>10||slots.some(x=>!x||typeof x.role_title!=='string'||!x.role_title.trim()||x.role_title.length>120||typeof x.requirements!=='string'||x.requirements.length>1000))return json({error:'Provide 1–10 collaborators with a role for each'},400);
     const id=crypto.randomUUID();
     await env.DB.prepare('INSERT INTO projects(id,owner_clerk_id,title,description,category,location,collaboration_mode) VALUES(?,?,?,?,?,?,?)').bind(id,user,clean(b.title,160),clean(b.description,5000),clean(b.category,80)||'Other',clean(b.location,160),mode).run();
+    for(let i=0;i<slots.length;i++)await env.DB.prepare('INSERT INTO project_collaborator_slots(id,project_id,slot_number,role_title,requirements) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),id,i+1,clean(slots[i].role_title,120),clean(slots[i].requirements,1000)).run();
     return json({id},201);
    }
    const match=/^\/api\/projects\/([a-f0-9-]{36})$/.exec(url.pathname);
    if(match&&request.method==='GET'){
     const row=await env.DB.prepare('SELECT id,owner_clerk_id,title,description,category,location,collaboration_mode,status,created_at FROM projects WHERE id=?').bind(match[1]).first();
     if(!row)return json({error:'Not found'},404);
-    return json({project:{...row,is_owner:row.owner_clerk_id===user,owner_clerk_id:undefined}});
+    const slots=await env.DB.prepare('SELECT slot_number,role_title,requirements FROM project_collaborator_slots WHERE project_id=? ORDER BY slot_number').bind(match[1]).all();
+    return json({project:{...row,collaborators:slots.results,is_owner:row.owner_clerk_id===user,owner_clerk_id:undefined}});
    }
    if(match&&request.method==='PATCH'){
     const owner=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(match[1]).first();
