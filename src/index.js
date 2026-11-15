@@ -238,8 +238,6 @@ export default {
     }
     const chatTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_team_messages'").first();
     if(!chatTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
-    const chatTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_team_messages'").first();
-    if(!chatTable)return json({error:'Team chat is being configured. Please try again after database setup.',code:'CHAT_SETUP_REQUIRED'},503);
     if(request.method==='GET'){
      const rows=await env.DB.prepare('SELECT id,sender_clerk_id,body,created_at FROM project_team_messages WHERE project_id=? ORDER BY created_at DESC LIMIT 100').bind(chat[1]).all();
      return json({messages:rows.results.reverse()});
