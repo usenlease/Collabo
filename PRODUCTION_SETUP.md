@@ -35,3 +35,10 @@ The repository now has a confirmed Cloudflare D1 database ID and binding, but th
 - Review API privacy, anti-abuse, rate limits, Clerk token claims and JWKS availability, and release rollback plan.
 
 **Never paste Cloudflare API tokens or Clerk secret keys into GitHub issues or this repository.**
+
+## Database execution evidence (2026-11-15)
+The Cloudflare D1 console screenshot for `collabodb` reports **“This query successfully executed”** after submitting `schema.sql`. This is evidence of successful execution, but table existence has not yet been independently checked. Verify with:
+```sql
+SELECT name FROM sqlite_master WHERE type='table' AND name IN ('projects','applications','milestones') ORDER BY name;
+```
+The result must include all three tables. Next, validate Worker deployment and Clerk authentication in staging before merging this draft PR.
