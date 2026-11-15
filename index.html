@@ -20,7 +20,7 @@ document.addEventListener('click',function(event){
   if(!button)return;
   if(button.id==='initiate'){event.preventDefault();openDemoPage('post')}
   else if(button.id==='explore'){event.preventDefault();openDemoPage('explore')}
-  else if(button.id==='sign'){event.preventDefault();window.cloudCollaboSignIn?.()}
+  else if(button.id==='sign'){event.preventDefault();if(typeof window.cloudCollaboSignIn==='function'){window.cloudCollaboSignIn()}else{alert('Sign-in is not ready. The authentication script did not load. Please refresh and try again.')}}
 });
 window.addEventListener('popstate',demoRoute);
 demoRoute();
