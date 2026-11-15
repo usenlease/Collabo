@@ -38,6 +38,37 @@ export default {
   const user=await identity(request,env);
   if(!user) return json({error:'Sign in required'},401);
   try {
+   const photoRoute=/^\/api\/projects\/([a-f0-9-]{36})\/pictures(?:\/([1-3]))?$/.exec(url.pathname);
+   if(photoRoute&&['GET','PUT','DELETE'].includes(request.method)){
+    const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(photoRoute[1]).first();
+    if(!p)return json({error:'Project not found'},404);
+    if(!env.PROJECT_PICTURES)return json({error:'Permanent picture storage is not configured',code:'PICTURE_STORAGE_UNAVAILABLE'},503);
+    const prefix='projects/'+photoRoute[1]+'/';
+    if(request.method==='GET'&&!photoRoute[2]){
+     const pictures=[];
+     for(let slot=1;slot<=3;slot++){const obj=await env.PROJECT_PICTURES.head(prefix+slot);if(obj)pictures.push({slot,url:'/api/projects/'+photoRoute[1]+'/pictures/'+slot})}
+     return json({pictures});
+    }
+    if(!photoRoute[2])return json({error:'Choose a picture slot from 1 to 3'},400);
+    const key=prefix+photoRoute[2];
+    if(request.method==='GET'){
+     const obj=await env.PROJECT_PICTURES.get(key);
+     if(!obj)return json({error:'Picture not found'},404);
+     return new Response(obj.body,{headers:{'content-type':obj.httpMetadata?.contentType||'image/jpeg','cache-control':'private, max-age=300','x-content-type-options':'nosniff'}});
+    }
+    if(p.owner_clerk_id!==user)return json({error:'Only the Initiator can change pictures'},403);
+    if(request.method==='DELETE'){await env.PROJECT_PICTURES.delete(key);return json({deleted:true})}
+    const type=request.headers.get('content-type')||'';
+    if(!['image/jpeg','image/png','image/webp'].includes(type))return json({error:'Use JPG, PNG or WebP pictures'},415);
+    const len=Number(request.headers.get('content-length')||0);
+    if(len>5*1024*1024)return json({error:'Maximum picture size is 5 MB'},413);
+    const bytes=await request.arrayBuffer();
+    if(!bytes.byteLength||bytes.byteLength>5*1024*1024)return json({error:'Maximum picture size is 5 MB'},413);
+    const u=new Uint8Array(bytes);const jpg=u[0]===255&&u[1]===216&&u[2]===255;const png=u[0]===137&&u[1]===80&&u[2]===78&&u[3]===71;const webp=u[0]===82&&u[1]===73&&u[2]===70&&u[3]===70&&u[8]===87&&u[9]===69&&u[10]===66&&u[11]===80;
+    if(!((type==='image/jpeg'&&jpg)||(type==='image/png'&&png)||(type==='image/webp'&&webp)))return json({error:'File content does not match picture type'},415);
+    await env.PROJECT_PICTURES.put(key,bytes,{httpMetadata:{contentType:type}});
+    return json({saved:true,slot:Number(photoRoute[2])});
+   }
    if(url.pathname==='/api/my-projects'&&request.method==='GET'){
     const lifecycleTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_lifecycle'").first();
     const sql=lifecycleTable?"SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.status,p.created_at,p.updated_at,COALESCE(l.stage,CASE WHEN p.status='closed' THEN 'closed' ELSE 'posted' END) AS lifecycle_stage FROM projects p LEFT JOIN project_lifecycle l ON l.project_id=p.id WHERE p.owner_clerk_id=? ORDER BY p.created_at DESC LIMIT 200":"SELECT id,title,description,category,location,collaboration_mode,status,created_at,updated_at,CASE WHEN status='closed' THEN 'closed' ELSE 'posted' END AS lifecycle_stage FROM projects WHERE owner_clerk_id=? ORDER BY created_at DESC LIMIT 200";
@@ -89,7 +120,9 @@ export default {
     const mode=['Local','Remote','Hybrid'].includes(b.collaboration_mode)?b.collaboration_mode:'Hybrid';
     const needsTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_needs'").first();
     if(!needsTable)return json({error:'Publishing is temporarily unavailable: the project requirements database needs setup. Your draft is still on this device. Please try again after the database repair.',code:'PROJECT_NEEDS_SETUP_REQUIRED'},503);
-    const id=crypto.randomUUID();
+    const id=/^[a-f0-9-]{36}$/.test(b.client_project_id||'')?b.client_project_id:crypto.randomUUID();
+    const existing=await env.DB.prepare('SELECT id,owner_clerk_id FROM projects WHERE id=?').bind(id).first();
+    if(existing){if(existing.owner_clerk_id!==user)return json({error:'Project identifier conflict'},409);return json({id,already_published:true},200)}
     const statements=[env.DB.prepare('INSERT INTO projects(id,owner_clerk_id,title,description,category,location,collaboration_mode) VALUES(?,?,?,?,?,?,?)').bind(id,user,clean(b.title,160),clean(b.description,5000),clean(b.category,80)||'Other',clean(b.location,160),mode)];
     for(let i=0;i<needs.length;i++)statements.push(env.DB.prepare('INSERT INTO project_needs(id,project_id,position,item_name,quantity,details) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),id,i+1,clean(needs[i].item_name,120),needs[i].quantity,clean(needs[i].details,1000)));
     await env.DB.batch(statements);
