@@ -20,9 +20,9 @@ document.addEventListener('click',function(event){
   if(!button)return;
   if(button.id==='initiate'){event.preventDefault();openDemoPage('post')}
   else if(button.id==='explore'){event.preventDefault();openDemoPage('explore')}
-  else if(button.id==='sign'){event.preventDefault();openDemoPage('room')}
+  else if(button.id==='sign'){event.preventDefault();window.cloudCollaboSignIn?.()}
 });
 window.addEventListener('popstate',demoRoute);
 demoRoute();
 
-</script></body></html>
+</script><script src="/clerk-auth.js" defer></script></body></html>
