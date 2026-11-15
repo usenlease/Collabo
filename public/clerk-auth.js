@@ -34,10 +34,30 @@
       else await clerk.openSignIn({ afterSignInUrl: window.location.origin + '/', afterSignUpUrl: window.location.origin + '/' });
     } catch (error) { failure('opening window', error); }
   };
+  window.cloudCollaboSignOut = async () => {
+    if (!clerk?.user) return;
+    try {
+      await clerk.signOut();
+      window.cloudCollaboPendingPage = null;
+      if (location.hash && location.hash !== '#home') location.hash = 'home';
+      refresh();
+    } catch (error) { failure('signing out', error); }
+  };
   function refresh() {
     if (!button) return;
     if (clerk.user) {
       button.textContent = 'My account';
+      let logout = document.getElementById('sign-out');
+      if (!logout) {
+        logout = document.createElement('button');
+        logout.id = 'sign-out';
+        logout.type = 'button';
+        logout.textContent = 'Sign out';
+        logout.setAttribute('aria-label', 'Sign out of Cloud Collabo');
+        button.insertAdjacentElement('afterend', logout);
+      }
+      logout.hidden = false;
+      logout.onclick = e => { e.preventDefault(); window.cloudCollaboSignOut(); };
       button.onclick = e => { e.preventDefault(); window.cloudCollaboSignIn(); };
       if (window.cloudCollaboPendingPage) {
         const page = window.cloudCollaboPendingPage;
@@ -46,6 +66,8 @@
       }
     } else {
       button.textContent = 'Sign in';
+      const logout = document.getElementById('sign-out');
+      if (logout) logout.hidden = true;
       button.onclick = e => { e.preventDefault(); window.cloudCollaboSignIn(); };
       if (location.hash && location.hash !== '#home') location.hash = 'home';
     }
