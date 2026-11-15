@@ -1,7 +1,10 @@
 /* Cloud Collabo production authentication. Publishable key is public; secret keys stay server-side. */
 (function () {
   'use strict';
-  const key = 'pk_live_Y2xlcmsuY2xvdWRjb2xsYWJvLmNvbSQ';
+  const productionKey = 'pk_live_Y2xlcmsuY2xvdWRjb2xsYWJvLmNvbSQ';
+  const developmentKey = 'pk_test_c3BsZW5kaWQtZ29ibGluLTk2OTUuY2xlcmsuYWNjb3VudHMuZGV2JA';
+  // Production credentials only on the approved production host.
+  const key = location.hostname === 'cloudcollabo.com' || location.hostname === 'www.cloudcollabo.com' ? productionKey : developmentKey;
   const button = document.getElementById('sign');
   const frontend = atob(key.substring(key.indexOf('_', 3) + 1)).replace(/\$$/, '');
   let clerk = null, loading = true, pending = false;
