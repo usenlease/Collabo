@@ -42,3 +42,6 @@ The Cloudflare D1 console screenshot for `collabodb` reports **“This query suc
 SELECT name FROM sqlite_master WHERE type='table' AND name IN ('projects','applications','milestones') ORDER BY name;
 ```
 The result must include all three tables. Next, validate Worker deployment and Clerk authentication in staging before merging this draft PR.
+
+## Verified D1 tables (2026-11-15)
+Cloudflare D1 console screenshot confirms the query `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('projects','applications','milestones') ORDER BY name;` returned `applications`, `milestones`, and `projects` in `collabodb`. Database schema is installed. Still pending: deployment, authenticated API tests, security review, and replacing demo frontend.
