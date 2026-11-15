@@ -57,7 +57,7 @@
       if (!window.Clerk) throw new Error('Clerk script did not expose window.Clerk');
       clerk = window.Clerk;
       // Load the full browser bundle, including Clerk's sign-in/profile UI.
-      await clerk.load();
+      await clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
       if (typeof clerk.openSignIn !== 'function') {
         throw new Error('Clerk UI components are unavailable; check the browser bundle');
       }
@@ -72,21 +72,23 @@
       failure('initialization', error);
     }
   }
-  function loadScript(src) {
+  function loadScript(src, onload) {
     const s = document.createElement('script');
     s.async = true;
     s.crossOrigin = 'anonymous';
     s.dataset.clerkPublishableKey = key;
     s.src = src;
-    s.onload = initialize;
+    s.onload = onload;
     s.onerror = () => {
       s.remove();
       loading = false;
-      failure('script loading', new Error('Clerk browser bundle could not load from ' + frontend));
+      failure('script loading', new Error('Clerk SDK or UI bundle could not load from ' + frontend));
     };
     document.head.appendChild(s);
   }
-  // Use Clerk's first-party production frontend and current full UI browser bundle.
-  // Do not fall back to a generic CDN bundle that may lack the hosted UI components.
-  loadScript('https://' + frontend + '/npm/@clerk/clerk-js@latest/dist/clerk.browser.js');
+  // Clerk Core 3 requires the separate UI bundle before the ClerkJS browser SDK.
+  // Load both from the verified production Frontend API (see Clerk JS quickstart).
+  loadScript('https://' + frontend + '/npm/@clerk/ui@1/dist/ui.browser.js', () => {
+    loadScript('https://' + frontend + '/npm/@clerk/clerk-js@6/dist/clerk.browser.js', initialize);
+  });
 })();
