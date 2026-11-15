@@ -8,6 +8,12 @@
   let clerk;
   let loading = true;
   let pendingOpen = false;
+  const clerkHost = atob(publishableKey.slice(8)).replace(/\$/, '');
+  const hostedSignIn = 'https://' + clerkHost + '/sign-in';
+  function fallbackSignIn() {
+    notice('Opening secure Clerk sign-in in a separate page.');
+    window.location.assign(hostedSignIn + '?redirect_url=' + encodeURIComponent(window.location.href));
+  }
   window.cloudCollaboIsSignedIn = function () { return Boolean(clerk && clerk.user); };
   function notice(message) {
     let el = document.getElementById('clerk-auth-notice');
@@ -22,17 +28,22 @@
   }
   window.cloudCollaboSignIn = async function () {
     try {
-      if (!clerk) { pendingOpen = true; notice(loading ? 'Loading secure sign-in. Please wait a moment.' : 'Sign-in is unavailable. Please refresh and try again.'); return; }
+      if (!clerk) { if (loading) { pendingOpen = true; notice('Loading secure sign-in. Please wait a moment.'); } else { fallbackSignIn(); } return; }
       if (clerk.user) { await clerk.openUserProfile(); return; }
-      await clerk.openSignIn();
+      try { await clerk.openSignIn(); }
+      catch (uiError) {
+        if (/UI components|loadUi|not loaded/i.test(String(uiError?.message || uiError))) { fallbackSignIn(); return; }
+        throw uiError;
+      }
     } catch (error) {
       console.error('Cloud Collabo sign-in error:', error);
       notice('Sign-in failed to open: ' + (error?.message || 'Clerk authentication error'));
+      fallbackSignIn();
     }
   };
   async function start() {
     try {
-      const host = atob(publishableKey.slice(8)).replace(/\$$/, '');
+      const host = clerkHost;
       const script = document.createElement('script');
       script.crossOrigin = 'anonymous';
       script.dataset.clerkPublishableKey = publishableKey;
@@ -64,10 +75,10 @@
         } catch (error) {
           loading = false;
           console.error('Clerk initialization failed:', error);
-          notice('Clerk initialization failed: ' + (error?.message || 'Unknown error'));
+          notice('Clerk initialization failed: ' + (error?.message || 'Unknown error') + '. Use Sign in to open the hosted login.');
         }
       };
-      script.onerror = function () { loading = false; notice('Clerk sign-in script failed to load. Check the Clerk publishable key and permitted domains.'); };
+      script.onerror = function () { loading = false; notice('Clerk sign-in script failed to load. Use Sign in to open the hosted login.'); };
       document.head.appendChild(script);
     } catch (error) { loading = false; notice('Secure registration configuration is unavailable.'); }
   }
