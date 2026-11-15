@@ -69,6 +69,31 @@ export default {
     await env.PROJECT_PICTURES.put(key,bytes,{httpMetadata:{contentType:type}});
     return json({saved:true,slot:Number(photoRoute[2])});
    }
+   const deleteProject=/^\/api\/projects\/([a-f0-9-]{36})$/.exec(url.pathname);
+   if(deleteProject&&request.method==='DELETE'){
+    const id=deleteProject[1];
+    const project=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(id).first();
+    if(!project)return json({error:'Project not found'},404);
+    if(project.owner_clerk_id!==user)return json({error:'Only the Initiator can delete this project'},403);
+    const existing=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('role_applications','project_needs','project_team_messages','project_lifecycle','collaboration_disputes','applications','milestones')").all();
+    const tables=new Set(existing.results.map(r=>r.name));
+    if(tables.has('role_applications')){
+     const committed=await env.DB.prepare("SELECT id FROM role_applications WHERE project_id=? LIMIT 1").bind(id).first();
+     if(committed)return json({error:'This project has a collaborator application or commitment and cannot be deleted. You may pause the project instead.',code:'COLLABORATOR_COMMITTED'},409);
+    }
+    if(tables.has('applications')){
+     const legacy=await env.DB.prepare("SELECT id FROM applications WHERE project_id=? LIMIT 1").bind(id).first();
+     if(legacy)return json({error:'This project has legacy applications. Resolve them before deleting'},409);
+    }
+    const ops=[];
+    if(tables.has('collaboration_disputes')&&tables.has('role_applications'))ops.push(env.DB.prepare("DELETE FROM collaboration_disputes WHERE application_id IN (SELECT id FROM role_applications WHERE project_id=?)").bind(id));
+    for(const table of ['project_team_messages','role_applications','project_needs','project_lifecycle','milestones'])if(tables.has(table))ops.push(env.DB.prepare('DELETE FROM '+table+' WHERE project_id=?').bind(id));
+    ops.push(env.DB.prepare('DELETE FROM projects WHERE id=? AND owner_clerk_id=?').bind(id,user));
+    const results=await env.DB.batch(ops);
+    if(!results[results.length-1]?.meta?.changes)return json({error:'Project could not be deleted'},409);
+    if(env.PROJECT_PICTURES)await Promise.allSettled([1,2,3].map(slot=>env.PROJECT_PICTURES.delete('projects/'+id+'/'+slot)));
+    return json({deleted:true});
+   }
    if(url.pathname==='/api/my-projects'&&request.method==='GET'){
     const lifecycleTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_lifecycle'").first();
     const sql=lifecycleTable?"SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.status,p.created_at,p.updated_at,COALESCE(l.stage,CASE WHEN p.status='closed' THEN 'closed' ELSE 'posted' END) AS lifecycle_stage FROM projects p LEFT JOIN project_lifecycle l ON l.project_id=p.id WHERE p.owner_clerk_id=? ORDER BY p.created_at DESC LIMIT 200":"SELECT id,title,description,category,location,collaboration_mode,status,created_at,updated_at,CASE WHEN status='closed' THEN 'closed' ELSE 'posted' END AS lifecycle_stage FROM projects WHERE owner_clerk_id=? ORDER BY created_at DESC LIMIT 200";
