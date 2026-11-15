@@ -9,10 +9,10 @@
   let loading = true;
   let pendingOpen = false;
   const clerkHost = atob(publishableKey.slice(8)).replace(/\$/, '');
-  const hostedSignIn = 'https://' + clerkHost + '/sign-in';
+  // The Clerk frontend API host is not necessarily a hosted sign-in page.
+  // Never construct /sign-in on accounts.dev: it can return a 404.
   function fallbackSignIn() {
-    notice('Opening secure Clerk sign-in in a separate page.');
-    window.location.assign(hostedSignIn + '?redirect_url=' + encodeURIComponent(window.location.href));
+    notice('Secure sign-in is temporarily unavailable. Please try again later. The Cloud Collabo Clerk sign-in configuration needs attention.');
   }
   window.cloudCollaboIsSignedIn = function () { return Boolean(clerk && clerk.user); };
   function notice(message) {
@@ -75,10 +75,10 @@
         } catch (error) {
           loading = false;
           console.error('Clerk initialization failed:', error);
-          notice('Clerk initialization failed: ' + (error?.message || 'Unknown error') + '. Use Sign in to open the hosted login.');
+          notice('Clerk initialization failed: ' + (error?.message || 'Unknown error') + '. Sign-in is temporarily unavailable.');
         }
       };
-      script.onerror = function () { loading = false; notice('Clerk sign-in script failed to load. Use Sign in to open the hosted login.'); };
+      script.onerror = function () { loading = false; notice('Clerk sign-in script failed to load. Sign-in is temporarily unavailable.'); };
       document.head.appendChild(script);
     } catch (error) { loading = false; notice('Secure registration configuration is unavailable.'); }
   }
