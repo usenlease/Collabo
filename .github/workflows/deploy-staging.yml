@@ -1,0 +1,24 @@
+name: Deploy Cloud Collabo staging
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: collabo-staging-deploy
+  cancel-in-progress: false
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Check out selected branch
+        uses: actions/checkout@v4
+      - name: Verify staging configuration
+        run: |
+          node -e "const c=require('./wrangler.staging.jsonc'); if(c.name!=='collabo-staging'||c.d1_databases?.[0]?.database_name!=='collabodb-preview'||!c.vars?.CLERK_ISSUER?.includes('.clerk.accounts.dev')) process.exit(1)"
+      - name: Deploy staging Worker only
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config wrangler.staging.jsonc
