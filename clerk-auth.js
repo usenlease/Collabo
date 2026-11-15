@@ -28,7 +28,7 @@
       const script = document.createElement('script');
       script.crossOrigin = 'anonymous';
       script.dataset.clerkPublishableKey = publishableKey;
-      script.src = 'https://' + host + '/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+      script.src = 'https://' + host + '/npm/@clerk/clerk-js@6/dist/clerk.browser.js';
       script.onload = async function () {
         try {
           clerk = window.Clerk;
