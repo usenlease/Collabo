@@ -16,5 +16,8 @@
       "database_name": "collabodb-preview",
       "database_id": "8efe01be-c2bc-415b-ba8c-b0a2844a18ed"
     }
-  ]
+  ],
+  "vars": {
+    "CLERK_ISSUER": "https://splendid-goblin-9695.clerk.accounts.dev"
+  }
 }
