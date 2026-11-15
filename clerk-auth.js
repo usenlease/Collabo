@@ -1,18 +1,15 @@
-/* Cloud Collabo: Clerk development sign-in integration.
-   This uses the selected independent Cloud Collabo Clerk application.
-   Production requires a Clerk production publishable key and approved domain.
-   No secret keys belong in browser code. */
+/* Cloud Collabo: Clerk production browser authentication. Public publishable key only; never embed a secret key. */
 (function () {
-  const publishableKey = 'pk_test_dGFsZW50ZWQtbWF5Zmx5LTIxNzYuY2xlcmsuYWNjb3VudHMuZGV2JA';
+  const publishableKey = 'pk_live_Y2xlcmsuY2xvdWRjb2xsYWJvLmNvbSQ';
   const signButton = document.getElementById('sign');
   let clerk;
   let loading = true;
   let pendingOpen = false;
   const clerkHost = atob(publishableKey.slice(8)).replace(/\$/, '');
-  const hostedSignIn = 'https://' + clerkHost + '/sign-in';
+  const hostedSignIn = '/sign-in';
   function fallbackSignIn() {
-    notice('Opening secure Clerk sign-in in a separate page.');
-    window.location.assign(hostedSignIn + '?redirect_url=' + encodeURIComponent(window.location.href));
+    notice('The sign-in window could not load.');
+    notice('Secure sign-in is not available yet. Please refresh and try again.');
   }
   window.cloudCollaboIsSignedIn = function () { return Boolean(clerk && clerk.user); };
   function notice(message) {
