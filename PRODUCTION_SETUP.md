@@ -21,3 +21,26 @@ All authenticated endpoints expect `Authorization: Bearer <Clerk session JWT>`. 
 
 ## Security caveats
 Review JWT verification and audience requirements before launch; verify against production Clerk configuration. No production database exists just because this branch was created. Add rate limiting, abuse controls and comprehensive integration tests before enabling public writes.
+
+## Production release gate — DO NOT MERGE YET
+The repository has no confirmed Cloudflare D1 database ID or binding, and no staging integration test evidence. Merging this branch as-is would deploy a Worker that returns HTTP 503 for API routes. It does not make the demonstration UI live.
+
+### Required Cloudflare account actions
+- In Cloudflare dashboard → Storage & databases → D1, create a database named `cloud-collabo-production`.
+- Copy the generated **database ID** (not an API token or secret).
+- Configure `wrangler.jsonc` with:
+```json
+"d1_databases": [
+  {
+    "binding": "DB",
+    "database_name": "cloud-collabo-production",
+    "database_id": "REPLACE_WITH_REAL_D1_DATABASE_ID"
+  }
+]
+```
+- Apply the schema to the remote database and confirm the tables exist.
+- Set up a separate staging deployment and verify authentication, project create/list/status, and application permissions.
+- Confirm the frontend actually calls the authenticated API; currently it still displays demonstration forms.
+- Review API privacy, anti-abuse, rate limits, Clerk token claims and JWKS availability, and release rollback plan.
+
+**Never paste Cloudflare API tokens or Clerk secret keys into GitHub issues or this repository.**
