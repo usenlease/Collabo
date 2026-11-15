@@ -13,9 +13,16 @@ function demoRoute(){const page=location.hash.replace('#','')||'home';if(page===
 if(page==='post'){shell('Initiate a Collabo','<p class="demo-muted">Preview the project form. Information stays on this screen; nothing is uploaded or published.</p><div class="demo-card"><label class="demo-field">Project name<input placeholder="e.g. Community farming project"></label><label class="demo-field">Project location<input placeholder="City and country"></label><label class="demo-field">Description<textarea rows="4" placeholder="Describe the project and what collaborators can contribute"></textarea></label><label class="demo-field">Collaboration type<select><option>Local</option><option>Remote</option><option>Hybrid</option></select></label><h3>Project photos (maximum 3)</h3><p class="demo-muted">Choose pictures or take photos on supported phones. Files are previewed locally and are not sent anywhere.</p><div class="demo-grid">'+[1,2,3].map(n=>'<div class="demo-photo"><label>Photo '+n+'<input type="file" accept="image/png,image/jpeg,image/webp" capture="environment" data-photo="'+n+'"></label><div id="photo-'+n+'"></div></div>').join('')+'</div><p class="demo-status">Admin review and posting fee are required for real publication. Payment and submission are disabled in this demo.</p><button disabled aria-disabled="true">Submit for approval — unavailable in demo</button></div>');document.querySelectorAll('[data-photo]').forEach(input=>input.onchange=()=>{const file=input.files[0],slot=document.getElementById('photo-'+input.dataset.photo);slot.replaceChildren();if(!file)return;if(file.size>5*1024*1024){slot.textContent='Please choose an image under 5 MB';input.value='';return}const img=document.createElement('img');img.alt='Selected local photo preview';img.src=URL.createObjectURL(file);slot.append(img)});return}
 if(page==='room'){shell('Project Control Room — Demo','<p class="demo-muted">Illustrative workspace. There are no real collaborators, transactions or private messages.</p><div class="demo-grid"><div class="demo-card"><h3>Project overview</h3><p>Community Farming Partnership</p><span class="demo-tag">Sample approved project</span></div><div class="demo-card"><h3>Collaborators</h3><p>Example team: Initiator, Sarah, David</p><button disabled>Send email invitation — disabled</button></div><div class="demo-card"><h3>Tasks</h3><label><input type="checkbox" checked> Define requirements</label><br><label><input type="checkbox"> Source equipment</label><br><label><input type="checkbox"> Review milestones</label></div><div class="demo-card"><h3>Group chat</h3><p class="demo-muted">Sample: Welcome to the project!</p><button disabled>Send message — disabled</button></div><div class="demo-card"><h3>Finances</h3><p class="demo-muted">Payment tracking will require verified transactions.</p><button disabled>Payments — disabled</button></div><div class="demo-card"><h3>Approvals</h3><p class="demo-muted">Admin approval and final settlement are disabled in this public demo.</p></div></div>');return}location.hash='home'}
 window.addEventListener('hashchange',demoRoute);
-document.getElementById('initiate').onclick=()=>location.hash='post';
-document.getElementById('explore').onclick=()=>location.hash='explore';
-document.getElementById('sign').onclick=()=>{location.hash='room'};
+// Direct navigation avoids relying on hashchange delivery in mobile browsers.
+function openDemoPage(page){if(location.hash!=='#'+page){history.pushState(null,'','#'+page)}demoRoute();}
+document.addEventListener('click',function(event){
+  const button=event.target.closest('button');
+  if(!button)return;
+  if(button.id==='initiate'){event.preventDefault();openDemoPage('post')}
+  else if(button.id==='explore'){event.preventDefault();openDemoPage('explore')}
+  else if(button.id==='sign'){event.preventDefault();openDemoPage('room')}
+});
+window.addEventListener('popstate',demoRoute);
 demoRoute();
 
 </script></body></html>
