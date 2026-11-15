@@ -1,9 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "collabo",
+  "main": "./src/index.js",
   "compatibility_date": "2026-11-14",
-  "assets": {
-    "directory": "./public"
-  },
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
   "previews": {}
 }
