@@ -1,0 +1,1 @@
+// Public Clerk publishable key only. Never paste a Clerk secret key here.\nwindow.CLOUD_COLLABO_CLERK_PUBLISHABLE_KEY = '';\n
