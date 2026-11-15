@@ -6,6 +6,8 @@
   const publishableKey = 'pk_test_dGFsZW50ZWQtbWF5Zmx5LTIxNzYuY2xlcmsuYWNjb3VudHMuZGV2JA';
   const signButton = document.getElementById('sign');
   let clerk;
+  let loading = true;
+  let pendingOpen = false;
   window.cloudCollaboIsSignedIn = function () { return Boolean(clerk && clerk.user); };
   function notice(message) {
     let el = document.getElementById('clerk-auth-notice');
@@ -20,7 +22,7 @@
   }
   window.cloudCollaboSignIn = async function () {
     try {
-      if (!clerk) { notice('Sign-in cannot open because Clerk has not loaded. Check the authentication configuration and refresh.'); return; }
+      if (!clerk) { pendingOpen = true; notice(loading ? 'Loading secure sign-in. Please wait a moment.' : 'Sign-in is unavailable. Please refresh and try again.'); return; }
       if (clerk.user) { await clerk.openUserProfile(); return; }
       await clerk.openSignIn();
     } catch (error) {
@@ -39,7 +41,9 @@
         try {
           clerk = window.Clerk;
           if (!clerk) throw new Error('Clerk SDK did not initialize');
-          await clerk.load();
+          await clerk.load({ loadUi: true });
+          loading = false;
+          if (pendingOpen) { pendingOpen = false; await window.cloudCollaboSignIn(); }
           function update() {
             if (clerk.user && window.cloudCollaboPendingPage) {
               const page = window.cloudCollaboPendingPage;
@@ -58,13 +62,14 @@
           clerk.addListener(update);
           // Sign-up is available within Clerk's hosted sign-in modal.
         } catch (error) {
+          loading = false;
           console.error('Clerk initialization failed:', error);
           notice('Clerk initialization failed: ' + (error?.message || 'Unknown error'));
         }
       };
-      script.onerror = function () { notice('Clerk sign-in script failed to load. Check the Clerk publishable key and permitted domains.'); };
+      script.onerror = function () { loading = false; notice('Clerk sign-in script failed to load. Check the Clerk publishable key and permitted domains.'); };
       document.head.appendChild(script);
-    } catch (error) { notice('Secure registration configuration is unavailable.'); }
+    } catch (error) { loading = false; notice('Secure registration configuration is unavailable.'); }
   }
   start();
 })();
