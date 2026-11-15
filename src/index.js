@@ -87,9 +87,12 @@ export default {
     const b=await body(request);if(!b||typeof b.title!=='string'||b.title.trim().length<3||b.title.length>160)return json({error:'Title must be 3–160 characters'},400);
     const needs=Array.isArray(b.needs)?b.needs:[];if(needs.length<1||needs.length>10||needs.some(n=>!n||!clean(n.item_name,120)||!Number.isInteger(n.quantity)||n.quantity<1||n.quantity>10000))return json({error:'Add 1–10 collaborator or resource requirements'},400);
     const mode=['Local','Remote','Hybrid'].includes(b.collaboration_mode)?b.collaboration_mode:'Hybrid';
+    const needsTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_needs'").first();
+    if(!needsTable)return json({error:'Publishing is temporarily unavailable: the project requirements database needs setup. Your draft is still on this device. Please try again after the database repair.',code:'PROJECT_NEEDS_SETUP_REQUIRED'},503);
     const id=crypto.randomUUID();
-    await env.DB.prepare('INSERT INTO projects(id,owner_clerk_id,title,description,category,location,collaboration_mode) VALUES(?,?,?,?,?,?,?)').bind(id,user,clean(b.title,160),clean(b.description,5000),clean(b.category,80)||'Other',clean(b.location,160),mode).run();
-    for(let i=0;i<needs.length;i++)await env.DB.prepare('INSERT INTO project_needs(id,project_id,position,item_name,quantity,details) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),id,i+1,clean(needs[i].item_name,120),needs[i].quantity,clean(needs[i].details,1000)).run();
+    const statements=[env.DB.prepare('INSERT INTO projects(id,owner_clerk_id,title,description,category,location,collaboration_mode) VALUES(?,?,?,?,?,?,?)').bind(id,user,clean(b.title,160),clean(b.description,5000),clean(b.category,80)||'Other',clean(b.location,160),mode)];
+    for(let i=0;i<needs.length;i++)statements.push(env.DB.prepare('INSERT INTO project_needs(id,project_id,position,item_name,quantity,details) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),id,i+1,clean(needs[i].item_name,120),needs[i].quantity,clean(needs[i].details,1000)));
+    await env.DB.batch(statements);
     return json({id},201);
    }
    const match=/^\/api\/projects\/([a-f0-9-]{36})$/.exec(url.pathname);
