@@ -1,0 +1,2 @@
+CREATE TABLE IF NOT EXISTS collaboration_disputes (id TEXT PRIMARY KEY, application_id TEXT NOT NULL REFERENCES role_applications(id), reporter_clerk_id TEXT NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','resolved')), created_at TEXT NOT NULL DEFAULT (datetime('now')));
+CREATE INDEX IF NOT EXISTS idx_collaboration_disputes_application ON collaboration_disputes(application_id,status);
