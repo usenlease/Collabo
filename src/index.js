@@ -44,9 +44,11 @@ export default {
    }
    if(url.pathname==='/api/projects'&&request.method==='POST'){
     const b=await body(request);if(!b||typeof b.title!=='string'||b.title.trim().length<3||b.title.length>160)return json({error:'Title must be 3–160 characters'},400);
+    const needs=Array.isArray(b.needs)?b.needs:[];if(needs.length<1||needs.length>10||needs.some(n=>!n||!clean(n.item_name,120)||!Number.isInteger(n.quantity)||n.quantity<1||n.quantity>10000))return json({error:'Add 1–10 collaborator or resource requirements'},400);
     const mode=['Local','Remote','Hybrid'].includes(b.collaboration_mode)?b.collaboration_mode:'Hybrid';
     const id=crypto.randomUUID();
     await env.DB.prepare('INSERT INTO projects(id,owner_clerk_id,title,description,category,location,collaboration_mode) VALUES(?,?,?,?,?,?,?)').bind(id,user,clean(b.title,160),clean(b.description,5000),clean(b.category,80)||'Other',clean(b.location,160),mode).run();
+    for(let i=0;i<needs.length;i++)await env.DB.prepare('INSERT INTO project_needs(id,project_id,position,item_name,quantity,details) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),id,i+1,clean(needs[i].item_name,120),needs[i].quantity,clean(needs[i].details,1000)).run();
     return json({id},201);
    }
    const match=/^\/api\/projects\/([a-f0-9-]{36})$/.exec(url.pathname);
@@ -80,6 +82,66 @@ export default {
     if(owner.owner_clerk_id!==user)return json({error:'Forbidden'},403);
     const result=await env.DB.prepare('SELECT id,applicant_clerk_id,message,status,created_at FROM applications WHERE project_id=? ORDER BY created_at DESC LIMIT 100').bind(apply[1]).all();
     return json({applications:result.results});
+   }
+
+   const needsRoute=/^\/api\/projects\/([a-f0-9-]{36})\/needs$/.exec(url.pathname);
+   if(needsRoute&&request.method==='GET'){
+    const p=await env.DB.prepare('SELECT id FROM projects WHERE id=?').bind(needsRoute[1]).first();
+    if(!p)return json({error:'Project not found'},404);
+    const needs=await env.DB.prepare("SELECT n.id,n.item_name,n.quantity,n.details,COALESCE((SELECT SUM(a.offered_quantity) FROM role_applications a WHERE a.need_id=n.id AND a.status='approved'),0) AS approved FROM project_needs n WHERE n.project_id=? ORDER BY n.position").bind(needsRoute[1]).all();
+    return json({needs:needs.results});
+   }
+   const rolesRoute=/^\/api\/projects\/([a-f0-9-]{36})\/role-applications$/.exec(url.pathname);
+   if(rolesRoute&&request.method==='POST'){
+    const p=await env.DB.prepare('SELECT owner_clerk_id,status FROM projects WHERE id=?').bind(rolesRoute[1]).first();
+    if(!p)return json({error:'Project not found'},404);
+    if(p.owner_clerk_id===user||p.status!=='open')return json({error:'Applications unavailable'},403);
+    const b=await body(request);
+    const n=await env.DB.prepare('SELECT id,quantity FROM project_needs WHERE id=? AND project_id=?').bind(b?.need_id,rolesRoute[1]).first();
+    if(!n)return json({error:'Choose a listed role or resource'},400);
+    const qty=Number(b.offered_quantity),amount=Number(b.rate_amount);
+    if(!Number.isInteger(qty)||qty<1||qty>n.quantity||!Number.isFinite(amount)||amount<0||!['hour','day','month','project','item'].includes(b.rate_period)||!['USD','KES','GBP','EUR','CAD','AUD','INR'].includes(b.currency)||!clean(b.experience,2000))return json({error:'Enter valid experience, quantity, currency and rate'},400);
+    try{await env.DB.prepare('INSERT INTO role_applications(id,project_id,need_id,applicant_clerk_id,experience,offered_quantity,rate_amount,currency,rate_period,message) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(),rolesRoute[1],n.id,user,clean(b.experience,2000),qty,amount,b.currency,b.rate_period,clean(b.message,2000)).run();}
+    catch{return json({error:'You already applied for this role or the application failed'},409)}
+    return json({submitted:true},201);
+   }
+   if(rolesRoute&&request.method==='GET'){
+    const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(rolesRoute[1]).first();
+    if(!p)return json({error:'Project not found'},404);
+    const owner=p.owner_clerk_id===user;
+    const rows=await env.DB.prepare("SELECT a.id,a.need_id,n.item_name,a.applicant_clerk_id,a.experience,a.offered_quantity,a.rate_amount,a.currency,a.rate_period,a.message,a.status,a.created_at FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=? AND (a.applicant_clerk_id=? OR ?=1) ORDER BY a.created_at DESC").bind(rolesRoute[1],user,owner?1:0).all();
+    return json({applications:rows.results,is_owner:owner});
+   }
+   const decision=/^\/api\/projects\/([a-f0-9-]{36})\/role-applications\/([a-f0-9-]{36})$/.exec(url.pathname);
+   if(decision&&request.method==='PATCH'){
+    const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(decision[1]).first();
+    if(!p||p.owner_clerk_id!==user)return json({error:'Only the Initiator can decide'},403);
+    const b=await body(request);if(!['approved','declined'].includes(b?.status))return json({error:'Invalid decision'},400);
+    const a=await env.DB.prepare("SELECT a.id,a.status,a.need_id,a.offered_quantity,n.quantity FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.id=? AND a.project_id=?").bind(decision[2],decision[1]).first();
+    if(!a||a.status!=='pending')return json({error:'Application is not pending'},409);
+    if(b.status==='approved'){
+     const filled=await env.DB.prepare("SELECT COALESCE(SUM(offered_quantity),0) AS total FROM role_applications WHERE need_id=? AND status='approved'").bind(a.need_id).first();
+     if(filled.total+a.offered_quantity>a.quantity)return json({error:'Not enough remaining positions or items'},409);
+    }
+    const result=await env.DB.prepare("UPDATE role_applications SET status=?,updated_at=datetime('now') WHERE id=? AND status='pending'").bind(b.status,a.id).run();
+    if(!result.meta.changes)return json({error:'Application already decided'},409);
+    return json({updated:true,status:b.status});
+   }
+   const chat=/^\/api\/projects\/([a-f0-9-]{36})\/team-messages$/.exec(url.pathname);
+   if(chat&&(request.method==='GET'||request.method==='POST')){
+    const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(chat[1]).first();
+    if(!p)return json({error:'Project not found'},404);
+    if(p.owner_clerk_id!==user){
+     const member=await env.DB.prepare("SELECT id FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(chat[1],user).first();
+     if(!member)return json({error:'Only approved collaborators can enter team chat'},403);
+    }
+    if(request.method==='GET'){
+     const rows=await env.DB.prepare('SELECT id,sender_clerk_id,body,created_at FROM project_team_messages WHERE project_id=? ORDER BY created_at DESC LIMIT 100').bind(chat[1]).all();
+     return json({messages:rows.results.reverse()});
+    }
+    const b=await body(request);if(typeof b?.message!=='string'||!b.message.trim()||b.message.length>2000)return json({error:'Message must be 1–2000 characters'},400);
+    await env.DB.prepare('INSERT INTO project_team_messages(id,project_id,sender_clerk_id,body) VALUES(?,?,?,?)').bind(crypto.randomUUID(),chat[1],user,b.message.trim()).run();
+    return json({sent:true},201);
    }
    return json({error:'Not found'},404);
   }catch(e){console.error('API failure',e);return json({error:'Server error'},500)}
