@@ -44,6 +44,29 @@ export default {
     const rows=await env.DB.prepare(sql).bind(user).all();
     return json({projects:rows.results,lifecycle_editable:!!lifecycleTable});
    }
+   if(url.pathname==='/api/my-collaborations'&&request.method==='GET'){
+    const ready=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('role_applications','project_lifecycle','collaboration_disputes')").all();
+    const tables=new Set(ready.results.map(r=>r.name));
+    if(!tables.has('role_applications'))return json({collaborations:[],applications_available:false});
+    const lifecycle=tables.has('project_lifecycle')?"COALESCE(l.stage,CASE WHEN p.status='closed' THEN 'closed' ELSE 'posted' END)":"CASE WHEN p.status='closed' THEN 'closed' ELSE 'posted' END";
+    const dispute=tables.has('collaboration_disputes')?"EXISTS(SELECT 1 FROM collaboration_disputes d WHERE d.application_id=a.id AND d.status='open')":"0";
+    const join=tables.has('project_lifecycle')?'LEFT JOIN project_lifecycle l ON l.project_id=p.id ':'';
+    const sql="SELECT a.id AS application_id,a.project_id,a.status AS application_status,a.created_at AS applied_at,p.title,p.description,p.category,p.location,p.status AS project_status,"+lifecycle+" AS lifecycle_stage,"+dispute+" AS is_disputed FROM role_applications a JOIN projects p ON p.id=a.project_id "+join+"WHERE a.applicant_clerk_id=? ORDER BY a.created_at DESC LIMIT 200";
+    const rows=await env.DB.prepare(sql).bind(user).all();
+    return json({collaborations:rows.results,disputes_available:tables.has('collaboration_disputes')});
+   }
+   const disputeRoute=/^\/api\/my-collaborations\/([a-f0-9-]{36})\/dispute$/.exec(url.pathname);
+   if(disputeRoute&&request.method==='POST'){
+    const a=await env.DB.prepare("SELECT applicant_clerk_id,status FROM role_applications WHERE id=?").bind(disputeRoute[1]).first();
+    if(!a||a.applicant_clerk_id!==user)return json({error:'Collaboration not found'},404);
+    if(a.status!=='approved')return json({error:'Only accepted collaborations can be disputed'},403);
+    const b=await body(request);
+    if(typeof b?.reason!=='string'||b.reason.trim().length<10||b.reason.length>2000)return json({error:'Describe the dispute in 10–2000 characters'},400);
+    const table=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='collaboration_disputes'").first();
+    if(!table)return json({error:'Dispute reporting is being configured'},503);
+    await env.DB.prepare("INSERT INTO collaboration_disputes(id,application_id,reporter_clerk_id,reason) VALUES(?,?,?,?)").bind(crypto.randomUUID(),disputeRoute[1],user,b.reason.trim()).run();
+    return json({reported:true},201);
+   }
    const stageRoute=/^\/api\/projects\/([a-f0-9-]{36})\/lifecycle$/.exec(url.pathname);
    if(stageRoute&&request.method==='PATCH'){
     const owner=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(stageRoute[1]).first();
