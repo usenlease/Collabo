@@ -74,7 +74,7 @@
       const logout = document.getElementById('sign-out');
       if (logout) logout.hidden = true;
       button.onclick = e => { e.preventDefault(); window.cloudCollaboSignIn(); };
-      if (location.hash && location.hash !== '#home') location.hash = 'home';
+      if (location.hash && !['#home','#post','#explore'].includes(location.hash) && !/^#project\/[a-f0-9-]{36}$/.test(location.hash)) location.hash = 'home';
     }
   }
   async function initialize() {
