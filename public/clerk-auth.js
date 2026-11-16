@@ -38,6 +38,11 @@
       else await clerk.openSignIn({ afterSignInUrl: window.location.origin + '/', afterSignUpUrl: window.location.origin + '/' });
     } catch (error) { failure('opening window', error); }
   };
+  window.cloudCollaboSignUp = async () => {
+    if (!clerk) { if (loading) { pending = true; notice('Connecting to secure registration…'); } else notice('Registration is temporarily unavailable. Please try again.'); return; }
+    try { if (!clerk.user) await clerk.openSignUp({ afterSignUpUrl: window.location.origin + '/', afterSignInUrl: window.location.origin + '/' }); }
+    catch (error) { failure('opening registration', error); }
+  };
   window.cloudCollaboSignOut = async () => {
     if (!clerk?.user) return;
     try {
