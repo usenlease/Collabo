@@ -29,6 +29,15 @@ async function identity(request, env) {
 }
 async function body(request){try{return await request.json()}catch{return null}}
 const clean=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
+async function consentState(env,projectId){
+ const table=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='role_applications'").first();
+ const active=table?(await env.DB.prepare("SELECT DISTINCT applicant_clerk_id AS id FROM role_applications WHERE project_id=? AND status='approved'").bind(projectId).all()).results.map(r=>r.id):[];
+ const requests=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_change_requests'").first();
+ if(!requests)return {active,request:null,approvals:[]};
+ const request=await env.DB.prepare("SELECT id,action,status,message,created_at FROM project_change_requests WHERE project_id=? ORDER BY created_at DESC LIMIT 1").bind(projectId).first();
+ const approvals=request?(await env.DB.prepare("SELECT collaborator_clerk_id,status,decided_at FROM project_change_approvals WHERE request_id=?").bind(request.id).all()).results:[];
+ return {active,request,approvals};
+}
 export default {
  async fetch(request,env){
   const url=new URL(request.url);
@@ -70,6 +79,7 @@ export default {
      return new Response(obj.body,{headers:{'content-type':obj.httpMetadata?.contentType||'image/jpeg','cache-control':'private, max-age=300','x-content-type-options':'nosniff'}});
     }
     if(p.owner_clerk_id!==user)return json({error:'Only the Initiator can change pictures'},403);
+    if(request.method!=='GET'&&(await consentState(env,photoRoute[1])).active.length)return json({error:'Onboarded collaborators must approve changes; picture edits are locked.',code:'CONSENT_REQUIRED'},409);
     if(request.method==='DELETE'){await env.PROJECT_PICTURES.delete(key);return json({deleted:true})}
     const type=request.headers.get('content-type')||'';
     if(!['image/jpeg','image/png','image/webp'].includes(type))return json({error:'Use JPG, PNG or WebP pictures'},415);
@@ -82,17 +92,56 @@ export default {
     await env.PROJECT_PICTURES.put(key,bytes,{httpMetadata:{contentType:type}});
     return json({saved:true,slot:Number(photoRoute[2])});
    }
+   const consentRoute=/^\/api\/projects\/([a-f0-9-]{36})\/deletion-consent(?:\/([a-f0-9-]{36}))?$/.exec(url.pathname);
+   if(consentRoute){
+    const id=consentRoute[1],state=await consentState(env,id);
+    const project=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(id).first();
+    if(!project)return json({error:'Project not found'},404);
+    const isOwner=project.owner_clerk_id===user,isMember=state.active.includes(user);
+    if(!isOwner&&!isMember)return json({error:'Not a project participant'},403);
+    if(request.method==='GET')return json({request:state.request,approvals:state.approvals.map(a=>({status:a.status,collaborator_clerk_id:isOwner?a.collaborator_clerk_id:(a.collaborator_clerk_id===user?'self':undefined)})),active_count:state.active.length,approved_count:state.approvals.filter(a=>a.status==='approved').length,my_status:state.approvals.find(a=>a.collaborator_clerk_id===user)?.status||null});
+    if(request.method==='POST'&&!consentRoute[2]){
+     if(!isOwner)return json({error:'Only initiator can request deletion'},403);
+     if(!state.active.length)return json({error:'No onboarded collaborators; deletion consent is not required'},400);
+     if(state.request?.status==='pending')return json({error:'A deletion request is already pending'},409);
+     const b=await body(request),message=clean(b?.message,1500);
+     if(message.length<15)return json({error:'Explain why the project should be deleted (15 characters minimum)'},400);
+     const requestId=crypto.randomUUID();
+     const ops=[env.DB.prepare("INSERT INTO project_change_requests(id,project_id,initiator_clerk_id,action,message) VALUES(?,?,?,'delete',?)").bind(requestId,id,user,message)];
+     for(const member of state.active)ops.push(env.DB.prepare("INSERT INTO project_change_approvals(request_id,collaborator_clerk_id) VALUES(?,?)").bind(requestId,member));
+     await env.DB.batch(ops);
+     return json({requested:true,id:requestId,required:state.active.length},201);
+    }
+    if(request.method==='PATCH'&&consentRoute[2]){
+     if(!isMember||!state.request||state.request.id!==consentRoute[2]||state.request.status!=='pending')return json({error:'No active consent request for this collaborator'},403);
+     const b=await body(request);
+     if(!['approved','rejected'].includes(b?.status))return json({error:'Choose approved or rejected'},400);
+     const result=await env.DB.prepare("UPDATE project_change_approvals SET status=?,decided_at=datetime('now') WHERE request_id=? AND collaborator_clerk_id=? AND status='pending'").bind(b.status,state.request.id,user).run();
+     if(!result.meta.changes)return json({error:'Your consent has already been recorded'},409);
+     const votes=(await env.DB.prepare("SELECT status FROM project_change_approvals WHERE request_id=?").bind(state.request.id).all()).results;
+     const status=votes.some(v=>v.status==='rejected')?'rejected':votes.every(v=>v.status==='approved')?'approved':'pending';
+     if(status!=='pending')await env.DB.prepare("UPDATE project_change_requests SET status=?,decided_at=datetime('now') WHERE id=? AND status='pending'").bind(status,state.request.id).run();
+     return json({recorded:true,status});
+    }
+    return json({error:'Not found'},404);
+   }
    const deleteProject=/^\/api\/projects\/([a-f0-9-]{36})$/.exec(url.pathname);
    if(deleteProject&&request.method==='DELETE'){
     const id=deleteProject[1];
     const project=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(id).first();
     if(!project)return json({error:'Project not found'},404);
     if(project.owner_clerk_id!==user)return json({error:'Only the Initiator can delete this project'},403);
-    const existing=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('role_applications','project_needs','project_team_messages','project_lifecycle','collaboration_disputes','applications','milestones')").all();
+    const existing=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('role_applications','project_needs','project_team_messages','project_lifecycle','collaboration_disputes','applications','milestones','project_change_requests')").all();
     const tables=new Set(existing.results.map(r=>r.name));
+    const consent=await consentState(env,id);
+    if(consent.active.length){
+     const approvals=consent.approvals;
+     const unanimous=consent.request?.action==='delete'&&consent.request.status==='approved'&&consent.active.every(member=>approvals.some(a=>a.collaborator_clerk_id===member&&a.status==='approved'))&&approvals.length===consent.active.length;
+     if(!unanimous)return json({error:'All onboarded collaborators must approve deletion before it can proceed.',code:'CONSENT_REQUIRED'},409);
+    }
     if(tables.has('role_applications')){
      const committed=await env.DB.prepare("SELECT id FROM role_applications WHERE project_id=? LIMIT 1").bind(id).first();
-     if(committed)return json({error:'This project has a collaborator application or commitment and cannot be deleted. You may pause the project instead.',code:'COLLABORATOR_COMMITTED'},409);
+     if(committed&&!consent.active.length)return json({error:'This project has applications. Resolve them before deleting.',code:'APPLICATIONS_PENDING'},409);
     }
     if(tables.has('applications')){
      const legacy=await env.DB.prepare("SELECT id FROM applications WHERE project_id=? LIMIT 1").bind(id).first();
@@ -100,6 +149,7 @@ export default {
     }
     const ops=[];
     if(tables.has('collaboration_disputes')&&tables.has('role_applications'))ops.push(env.DB.prepare("DELETE FROM collaboration_disputes WHERE application_id IN (SELECT id FROM role_applications WHERE project_id=?)").bind(id));
+    if(tables.has('project_change_requests')){ops.push(env.DB.prepare('DELETE FROM project_change_approvals WHERE request_id IN (SELECT id FROM project_change_requests WHERE project_id=?)').bind(id));ops.push(env.DB.prepare('DELETE FROM project_change_requests WHERE project_id=?').bind(id));}
     for(const table of ['project_team_messages','role_applications','project_needs','project_lifecycle','milestones'])if(tables.has(table))ops.push(env.DB.prepare('DELETE FROM '+table+' WHERE project_id=?').bind(id));
     ops.push(env.DB.prepare('DELETE FROM projects WHERE id=? AND owner_clerk_id=?').bind(id,user));
     const results=await env.DB.batch(ops);
@@ -141,6 +191,7 @@ export default {
     const owner=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(stageRoute[1]).first();
     if(!owner)return json({error:'Project not found'},404);
     if(owner.owner_clerk_id!==user)return json({error:'Only the Initiator can change the project stage'},403);
+    if((await consentState(env,stageRoute[1])).active.length)return json({error:'Project stage is locked while collaborators are onboarded.',code:'CONSENT_REQUIRED'},409);
     const b=await body(request);
     if(!['posted','open','ongoing','closed'].includes(b?.stage))return json({error:'Invalid project stage'},400);
     const table=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_lifecycle'").first();
@@ -173,10 +224,29 @@ export default {
     if(!row)return json({error:'Not found'},404);
     return json({project:{...row,is_owner:row.owner_clerk_id===user,owner_clerk_id:undefined}});
    }
+   if(match&&request.method==='PUT'){
+    const id=match[1];
+    const project=await env.DB.prepare('SELECT owner_clerk_id,status FROM projects WHERE id=?').bind(id).first();
+    if(!project)return json({error:'Project not found'},404);
+    if(project.owner_clerk_id!==user)return json({error:'Only the initiator may edit this project'},403);
+    const tables=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('role_applications','applications')").all();
+    const names=new Set(tables.results.map(t=>t.name));
+    if(names.has('role_applications')&&await env.DB.prepare('SELECT id FROM role_applications WHERE project_id=? LIMIT 1').bind(id).first())return json({error:'Project editing is locked because someone has applied. You can pause the project instead.',code:'PROJECT_LOCKED'},409);
+    if(names.has('applications')&&await env.DB.prepare('SELECT id FROM applications WHERE project_id=? LIMIT 1').bind(id).first())return json({error:'Project editing is locked because someone has applied.',code:'PROJECT_LOCKED'},409);
+    if((await consentState(env,id)).active.length)return json({error:'Onboarded collaborators must consent before project details can change.',code:'CONSENT_REQUIRED'},409);
+    const b=await body(request);
+    const title=clean(b?.title,160),description=clean(b?.description,5000),category=clean(b?.category,80),location=clean(b?.location,160);
+    if(!title||title.length<3||!description||!category||!location||!['Local','Remote','Hybrid'].includes(b?.collaboration_mode))return json({error:'Enter valid project details'},400);
+    const status=b?.repost?'open':project.status;
+    const result=await env.DB.prepare("UPDATE projects SET title=?,description=?,category=?,location=?,collaboration_mode=?,status=?,updated_at=datetime('now') WHERE id=? AND owner_clerk_id=? AND NOT EXISTS(SELECT 1 FROM role_applications WHERE project_id=?)").bind(title,description,category,location,b.collaboration_mode,status,id,user,id).run();
+    if(!result.meta.changes)return json({error:'Project could not be changed; a collaborator may have applied.',code:'PROJECT_LOCKED'},409);
+    return json({updated:true,status});
+   }
    if(match&&request.method==='PATCH'){
     const owner=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(match[1]).first();
     if(!owner)return json({error:'Not found'},404);
     if(owner.owner_clerk_id!==user)return json({error:'Forbidden'},403);
+    if((await consentState(env,match[1])).active.length)return json({error:'Project status is locked while collaborators are onboarded.',code:'CONSENT_REQUIRED'},409);
     const b=await body(request);
     if(!b||!['open','paused','closed'].includes(b.status))return json({error:'Invalid status'},400);
     await env.DB.prepare("UPDATE projects SET status=?,updated_at=datetime('now') WHERE id=?").bind(b.status,match[1]).run();
