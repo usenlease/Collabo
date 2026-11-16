@@ -173,6 +173,23 @@ export default {
     if(!row)return json({error:'Not found'},404);
     return json({project:{...row,is_owner:row.owner_clerk_id===user,owner_clerk_id:undefined}});
    }
+   if(match&&request.method==='PUT'){
+    const id=match[1];
+    const project=await env.DB.prepare('SELECT owner_clerk_id,status FROM projects WHERE id=?').bind(id).first();
+    if(!project)return json({error:'Project not found'},404);
+    if(project.owner_clerk_id!==user)return json({error:'Only the initiator may edit this project'},403);
+    const tables=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('role_applications','applications')").all();
+    const names=new Set(tables.results.map(t=>t.name));
+    if(names.has('role_applications')&&await env.DB.prepare('SELECT id FROM role_applications WHERE project_id=? LIMIT 1').bind(id).first())return json({error:'Project editing is locked because someone has applied. You can pause the project instead.',code:'PROJECT_LOCKED'},409);
+    if(names.has('applications')&&await env.DB.prepare('SELECT id FROM applications WHERE project_id=? LIMIT 1').bind(id).first())return json({error:'Project editing is locked because someone has applied.',code:'PROJECT_LOCKED'},409);
+    const b=await body(request);
+    const title=clean(b?.title,160),description=clean(b?.description,5000),category=clean(b?.category,80),location=clean(b?.location,160);
+    if(!title||title.length<3||!description||!category||!location||!['Local','Remote','Hybrid'].includes(b?.collaboration_mode))return json({error:'Enter valid project details'},400);
+    const status=b?.repost?'open':project.status;
+    const result=await env.DB.prepare("UPDATE projects SET title=?,description=?,category=?,location=?,collaboration_mode=?,status=?,updated_at=datetime('now') WHERE id=? AND owner_clerk_id=? AND NOT EXISTS(SELECT 1 FROM role_applications WHERE project_id=?)").bind(title,description,category,location,b.collaboration_mode,status,id,user,id).run();
+    if(!result.meta.changes)return json({error:'Project could not be changed; a collaborator may have applied.',code:'PROJECT_LOCKED'},409);
+    return json({updated:true,status});
+   }
    if(match&&request.method==='PATCH'){
     const owner=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(match[1]).first();
     if(!owner)return json({error:'Not found'},404);
