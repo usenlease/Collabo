@@ -79,6 +79,7 @@ export default {
      return new Response(obj.body,{headers:{'content-type':obj.httpMetadata?.contentType||'image/jpeg','cache-control':'private, max-age=300','x-content-type-options':'nosniff'}});
     }
     if(p.owner_clerk_id!==user)return json({error:'Only the Initiator can change pictures'},403);
+    if(request.method!=='GET'&&(await consentState(env,photoRoute[1])).active.length)return json({error:'Onboarded collaborators must approve changes; picture edits are locked.',code:'CONSENT_REQUIRED'},409);
     if(request.method==='DELETE'){await env.PROJECT_PICTURES.delete(key);return json({deleted:true})}
     const type=request.headers.get('content-type')||'';
     if(!['image/jpeg','image/png','image/webp'].includes(type))return json({error:'Use JPG, PNG or WebP pictures'},415);
@@ -130,7 +131,7 @@ export default {
     const project=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(id).first();
     if(!project)return json({error:'Project not found'},404);
     if(project.owner_clerk_id!==user)return json({error:'Only the Initiator can delete this project'},403);
-    const existing=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('role_applications','project_needs','project_team_messages','project_lifecycle','collaboration_disputes','applications','milestones')").all();
+    const existing=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('role_applications','project_needs','project_team_messages','project_lifecycle','collaboration_disputes','applications','milestones','project_change_requests')").all();
     const tables=new Set(existing.results.map(r=>r.name));
     const consent=await consentState(env,id);
     if(consent.active.length){
@@ -190,6 +191,7 @@ export default {
     const owner=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(stageRoute[1]).first();
     if(!owner)return json({error:'Project not found'},404);
     if(owner.owner_clerk_id!==user)return json({error:'Only the Initiator can change the project stage'},403);
+    if((await consentState(env,stageRoute[1])).active.length)return json({error:'Project stage is locked while collaborators are onboarded.',code:'CONSENT_REQUIRED'},409);
     const b=await body(request);
     if(!['posted','open','ongoing','closed'].includes(b?.stage))return json({error:'Invalid project stage'},400);
     const table=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_lifecycle'").first();
@@ -231,6 +233,7 @@ export default {
     const names=new Set(tables.results.map(t=>t.name));
     if(names.has('role_applications')&&await env.DB.prepare('SELECT id FROM role_applications WHERE project_id=? LIMIT 1').bind(id).first())return json({error:'Project editing is locked because someone has applied. You can pause the project instead.',code:'PROJECT_LOCKED'},409);
     if(names.has('applications')&&await env.DB.prepare('SELECT id FROM applications WHERE project_id=? LIMIT 1').bind(id).first())return json({error:'Project editing is locked because someone has applied.',code:'PROJECT_LOCKED'},409);
+    if((await consentState(env,id)).active.length)return json({error:'Onboarded collaborators must consent before project details can change.',code:'CONSENT_REQUIRED'},409);
     const b=await body(request);
     const title=clean(b?.title,160),description=clean(b?.description,5000),category=clean(b?.category,80),location=clean(b?.location,160);
     if(!title||title.length<3||!description||!category||!location||!['Local','Remote','Hybrid'].includes(b?.collaboration_mode))return json({error:'Enter valid project details'},400);
@@ -243,6 +246,7 @@ export default {
     const owner=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(match[1]).first();
     if(!owner)return json({error:'Not found'},404);
     if(owner.owner_clerk_id!==user)return json({error:'Forbidden'},403);
+    if((await consentState(env,match[1])).active.length)return json({error:'Project status is locked while collaborators are onboarded.',code:'CONSENT_REQUIRED'},409);
     const b=await body(request);
     if(!b||!['open','paused','closed'].includes(b.status))return json({error:'Invalid status'},400);
     await env.DB.prepare("UPDATE projects SET status=?,updated_at=datetime('now') WHERE id=?").bind(b.status,match[1]).run();
