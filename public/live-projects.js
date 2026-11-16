@@ -132,6 +132,28 @@ if(p.is_owner){
  controls.querySelector('#owner-pause').onclick=async()=>{const status=p.status==='paused'?'open':'paused';try{await api('/projects/'+match[1],{method:'PATCH',body:JSON.stringify({status})});activePage=null;await route()}catch(err){feedback.textContent=err.message}};
  controls.querySelector('#owner-delete').onclick=async()=>{if(!confirm('Permanently delete this project? This is only allowed before anyone applies.'))return;try{await api('/projects/'+match[1],{method:'DELETE'});location.hash='explore'}catch(err){feedback.textContent=err.message}};
 }
+const consentPanel=document.createElement('section');consentPanel.className='notice';consentPanel.innerHTML='<h3>Project deletion consent</h3><div id="consent-status">Loading consent status…</div><div id="consent-actions"></div>';
+if(p.is_owner||apps.some(a=>a.status==='approved')){root.append(consentPanel);try{
+ const data=await api('/projects/'+match[1]+'/deletion-consent');
+ const status=consentPanel.querySelector('#consent-status'),actions=consentPanel.querySelector('#consent-actions');
+ status.textContent=data.active_count+' active collaborators · '+data.approved_count+' approved · '+(data.request?.status||'No consent request');
+ if(p.is_owner&&data.active_count){
+  const manage=main.querySelector('.owner-controls');
+  if(manage){for(const id of ['owner-edit','owner-repost','owner-pause','owner-delete']){const btn=manage.querySelector('#'+id);if(btn)btn.disabled=true;}manage.querySelector('#owner-manage-feedback').textContent='Active collaborators are onboarded. Project changes are locked until mutual consent.';}
+  if(data.request?.status==='approved'){
+   const btn=document.createElement('button');btn.textContent='Delete project (all approved)';actions.append(btn);
+   btn.onclick=async()=>{if(!confirm('All collaborators approved. Permanently delete this project?'))return;try{await api('/projects/'+match[1],{method:'DELETE'});location.hash='explore'}catch(err){status.textContent=err.message}};
+  }else if(data.request?.status!=='pending'){
+   const btn=document.createElement('button');btn.textContent='Request unanimous deletion consent';actions.append(btn);
+   btn.onclick=async()=>{const message=prompt('Explain to all collaborators why you are requesting deletion (minimum 15 characters):');if(!message)return;try{await api('/projects/'+match[1]+'/deletion-consent',{method:'POST',body:JSON.stringify({message})});activePage=null;await route()}catch(err){status.textContent=err.message}};
+  }
+ }
+ if(!p.is_owner&&data.my_status==='pending'&&data.request?.status==='pending'){
+  const msg=document.createElement('p');msg.textContent=data.request.message;actions.append(msg);
+  for(const decision of ['approved','rejected']){const btn=document.createElement('button');btn.textContent=decision==='approved'?'Approve deletion':'Reject deletion';actions.append(btn);btn.onclick=async()=>{if(!confirm('Record your decision: '+decision+'?'))return;try{await api('/projects/'+match[1]+'/deletion-consent/'+data.request.id,{method:'PATCH',body:JSON.stringify({status:decision})});activePage=null;await route()}catch(err){status.textContent=err.message}}}
+ }
+}catch(err){consentPanel.querySelector('#consent-status').textContent=err.message}}
+}
 if(p.is_owner||apps.some(a=>a.status==='approved')){const chat=document.getElementById('team-chat');chat.innerHTML='<h3>Private project team chat</h3><div id="chat-messages">Loading…</div><form id="chat-form"><label>Team message<textarea name="message" maxlength="2000" required></textarea></label><button class="primary" type="submit">Send to team</button></form><button type="button" id="chat-refresh">Refresh messages</button>';const refresh=async()=>{try{const d=await api('/projects/'+match[1]+'/team-messages');document.getElementById('chat-messages').innerHTML=d.messages.map(m=>'<p><strong>Member:</strong> '+esc(m.body)+' <small>'+esc(m.created_at)+'</small></p>').join('')||'<p>No messages yet.</p>'}catch(err){document.getElementById('chat-messages').textContent=err.message;if(err.message.includes('being configured')){document.getElementById('chat-form').hidden=true;document.getElementById('chat-refresh').hidden=true};if(err.message.includes('database is being set up')){document.getElementById('chat-form').querySelector('button').disabled=true;document.getElementById('chat-form').querySelector('textarea').disabled=true}}};document.getElementById('chat-refresh').onclick=refresh;document.getElementById('chat-form').onsubmit=async e=>{e.preventDefault();const field=e.currentTarget.elements.message;try{await api('/projects/'+match[1]+'/team-messages',{method:'POST',body:JSON.stringify({message:field.value})});field.value='';await refresh()}catch(err){if(err.message.includes('being configured')){document.getElementById('chat-form').hidden=true;document.getElementById('chat-refresh').hidden=true;document.getElementById('chat-messages').textContent=err.message}else alert(err.message)}};refresh()}
 }catch(err){document.getElementById('project-details').textContent=err.message}return}
 location.hash='home'}
