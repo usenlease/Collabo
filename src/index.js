@@ -35,6 +35,19 @@ export default {
   if(!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
   if(!env.DB) return json({error:'Database not configured'},503);
   if(url.pathname==='/api/health'&&request.method==='GET') return json({status:'ok'});
+  // Public, read-only discovery. Never expose owner identifiers or private applications.
+  if(request.method==='GET' && url.pathname==='/api/public/projects'){
+    try {const rows=await env.DB.prepare("SELECT id,title,description,category,location,collaboration_mode,status,created_at FROM projects WHERE status='open' ORDER BY created_at DESC LIMIT 100").all();return json({projects:rows.results})}
+    catch{return json({error:'Projects temporarily unavailable'},503)}
+  }
+  const publicDetail=/^\/api\/public\/projects\/([a-f0-9-]{36})$/.exec(url.pathname);
+  if(request.method==='GET' && publicDetail){
+    try {const p=await env.DB.prepare("SELECT id,title,description,category,location,collaboration_mode,status,created_at FROM projects WHERE id=? AND status='open'").bind(publicDetail[1]).first();if(!p)return json({error:'Project not found'},404);
+      const table=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_needs'").first();
+      const needs=table?(await env.DB.prepare("SELECT item_name,quantity,details FROM project_needs WHERE project_id=?").bind(p.id).all()).results:[];
+      return json({project:p,needs});
+    }catch{return json({error:'Project preview temporarily unavailable'},503)}
+  }
   const user=await identity(request,env);
   if(!user) return json({error:'Sign in required'},401);
   try {
