@@ -427,11 +427,11 @@ export default {
     }
     const [active,approved]=await Promise.all([
      env.DB.prepare('SELECT user_id FROM project_chat_presence WHERE project_id=? AND last_seen_at>=unixepoch()-40').bind(presence[1]).all(),
-     env.DB.prepare("SELECT DISTINCT applicant_clerk_id FROM role_applications WHERE project_id=? AND status='approved'").bind(presence[1]).all()
+     env.DB.prepare("SELECT a.applicant_clerk_id,GROUP_CONCAT(DISTINCT n.item_name) AS roles FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=? AND a.status='approved' GROUP BY a.applicant_clerk_id").bind(presence[1]).all()
     ]);
-    const members=[{id:project.owner_clerk_id,role:'initiator'},...approved.results.filter(x=>x.applicant_clerk_id!==project.owner_clerk_id).map(x=>({id:x.applicant_clerk_id,role:'collaborator'}))];
+    const members=[{id:project.owner_clerk_id,role:'initiator'},...approved.results.filter(x=>x.applicant_clerk_id!==project.owner_clerk_id).map(x=>({id:x.applicant_clerk_id,role:'collaborator',label:x.roles||'Role not specified'}))];
     const present=new Set(active.results.map(x=>x.user_id));
-    return json({joined:members.length,collaborators_joined:members.length-1,active:members.filter(x=>present.has(x.id)).map(x=>({role:x.role,id:x.id})),you:user});
+    return json({joined:members.length,collaborators_joined:members.length-1,active:members.filter(x=>present.has(x.id)).map(x=>({role:x.role,label:x.role==='initiator'?'Initiator':x.label,id:x.id})),you:user});
    }
    const chat=/^\/api\/projects\/([a-f0-9-]{36})\/team-messages$/.exec(url.pathname);
    if(chat&&(request.method==='GET'||request.method==='POST')){
