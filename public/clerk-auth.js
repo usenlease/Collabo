@@ -101,7 +101,7 @@
     } catch (error) {
       clerk = null;
       loading = false;
-      failure('initialization', error);
+      retryNotice('Clerk initialization', error?.message||String(error));
     }
   }
   let loadAttempt = 0;
