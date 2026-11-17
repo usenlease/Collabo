@@ -288,7 +288,7 @@ const updatePresence=async()=>{
  try{
   const d=await api('/projects/'+match[1]+'/team-presence',{method:'POST',body:JSON.stringify({active:!document.hidden})});
   presenceCount.textContent=d.collaborators_joined+' approved collaborator'+(d.collaborators_joined===1?'':'s')+' joined · '+d.active.length+' active in chat';
-  presenceDots.innerHTML=d.active.map((m,i)=>'<span title="'+(m.role==='initiator'?'Initiator':'Collaborator')+' active" aria-label="'+(m.role==='initiator'?'Initiator':'Collaborator')+' active" style="width:24px;height:24px;border-radius:50%;background:'+(m.role==='initiator'?'#dc2626':'#16a34a')+';border:2px solid white;box-shadow:0 0 0 2px '+(m.role==='initiator'?'#dc2626':'#16a34a')+'"></span>').join('');
+  presenceDots.innerHTML=d.active.map(m=>{const label=m.role==='initiator'?'Initiator':String(m.label||'Role not specified');const color=m.role==='initiator'?'#dc2626':'#16a34a';return '<span title="'+esc(label)+' active" aria-label="'+esc(label)+' active" style="display:inline-flex;align-items:center;gap:6px;border:1px solid '+color+';border-radius:18px;padding:5px 9px;font-weight:600;font-size:12px"><span aria-hidden="true" style="width:13px;height:13px;flex-shrink:0;border-radius:50%;background:'+color+'"></span>'+esc(label)+'</span>'}).join('');
  }catch(e){presenceCount.textContent='Member activity temporarily unavailable'}
 };
 updatePresence();presenceTimer=setInterval(updatePresence,12000);
