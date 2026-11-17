@@ -104,23 +104,58 @@
       failure('initialization', error);
     }
   }
-  function loadScript(src, onload) {
-    const s = document.createElement('script');
-    s.async = true;
-    s.crossOrigin = 'anonymous';
-    s.dataset.clerkPublishableKey = key;
-    s.src = src;
-    s.onload = onload;
-    s.onerror = () => {
+  let loadAttempt = 0;
+  function retryNotice(stage, detail) {
+    console.error('Cloud Collabo Clerk '+stage,detail);
+    notice('Secure sign-in could not connect ('+stage+'). Please check your internet connection and retry. If this continues, the Clerk domain DNS or configuration needs attention.');
+    const el=document.getElementById('clerk-auth-notice');
+    let retry=document.getElementById('clerk-auth-retry');
+    if(!retry){
+      retry=document.createElement('button');
+      retry.id='clerk-auth-retry';
+      retry.type='button';
+      retry.textContent='Retry secure sign-in';
+      retry.style.cssText='display:block;margin:10px auto 0;padding:8px 14px;border:1px solid #9a6500;border-radius:8px;background:white;color:#754900';
+      el.appendChild(retry);
+    }
+    retry.onclick=()=>{retry.disabled=true;retry.textContent='Retrying…';loadAuthentication();};
+  }
+  function loadScript(src, label, onload) {
+    const s=document.createElement('script');
+    s.async=true;
+    s.crossOrigin='anonymous';
+    s.dataset.clerkPublishableKey=key;
+    s.src=src;
+    let finished=false;
+    const timeout=setTimeout(()=>fail('timed out'),15000);
+    function fail(reason){
+      if(finished)return;
+      finished=true;
+      clearTimeout(timeout);
       s.remove();
-      loading = false;
-      failure('script loading', new Error('Clerk SDK or UI bundle could not load from ' + frontend));
+      loading=false;
+      retryNotice(label,reason+' while loading '+src);
+    }
+    s.onload=()=>{
+      if(finished)return;
+      finished=true;
+      clearTimeout(timeout);
+      onload();
     };
+    s.onerror=()=>fail('network or DNS failure');
     document.head.appendChild(s);
   }
-  // Clerk Core 3 requires the separate UI bundle before the ClerkJS browser SDK.
-  // Load both from the verified production Frontend API (see Clerk JS quickstart).
-  loadScript('https://' + frontend + '/npm/@clerk/ui@1/dist/ui.browser.js', () => {
-    loadScript('https://' + frontend + '/npm/@clerk/clerk-js@6/dist/clerk.browser.js', initialize);
-  });
+  function loadAuthentication(){
+    loadAttempt++;
+    loading=true;
+    initialized=false;
+    clerk=null;
+    document.getElementById('clerk-auth-retry')?.remove();
+    notice('Connecting to secure sign-in…');
+    // Do not fall back to test credentials on production.
+    loadScript('https://' + frontend + '/npm/@clerk/ui@1/dist/ui.browser.js','Clerk UI bundle',()=>{
+      loadScript('https://' + frontend + '/npm/@clerk/clerk-js@6/dist/clerk.browser.js','Clerk browser SDK',initialize);
+    });
+  }
+  loadAuthentication();
 })();
