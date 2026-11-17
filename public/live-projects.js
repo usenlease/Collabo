@@ -42,9 +42,23 @@ async function showProjection(projectId){
   const actualProfit=actualIncome-actualExpenses,fee=Math.max(0,actualProfit)*.05,distributable=Math.max(0,actualProfit)-fee;
   const feeProjected=Math.max(0,projectedProfit)*.05;
   const shareTotal=people.reduce((n,x)=>n+Number(x.profit_share_percent||0),0);
+  const simulationParticipants=people.map(x=>({name:x.display_name||'Participant',role:x.role_name||'Contributor',value:Math.max(0,Number(x.contribution_value)||0),agreed:x.profit_share_percent==null?null:Number(x.profit_share_percent)}));
+  const simulate=(revenue,expenses,rate)=>{
+   const profit=revenue-expenses,fee=Math.max(0,profit)*0.05,tax=Math.max(0,profit-fee)*rate/100,pool=Math.max(0,profit-fee-tax);
+   const allAgreed=simulationParticipants.length>0&&simulationParticipants.every(x=>x.agreed!==null);
+   const validAgreed=allAgreed&&Math.abs(simulationParticipants.reduce((a,x)=>a+x.agreed,0)-100)<0.01;
+   const shares=simulationParticipants.map(x=>({name:x.name,role:x.role,value:x.value,pct:validAgreed?x.agreed:(totalValue>0?100*x.value/totalValue:0)}));
+   return {profit,fee,tax,pool,shares,validAgreed,unallocated:pool*(1-shares.reduce((a,x)=>a+x.pct,0)/100)};
+  };
+  const scenarioSection=()=>{
+   const assumedRevenue=Math.max(0,Number(s.projected_revenue)||0),assumedExpenses=Math.max(0,Number(s.projected_expenses)||0);
+   return '<section class="projection-panel" id="collabo-simulator"><h3>Project-specific Collabo Simulation</h3><p>Live what-if estimates using '+simulationParticipants.length+' recorded participants and '+money(totalValue,currency)+' of valued contributions. Adjust the assumptions below without changing saved project records.</p><div class="projection-metrics"><label>Projected revenue ($)<input id="sim-revenue" type="number" min="0" step="0.01" value="'+assumedRevenue+'"></label><label>Projected expenses ($)<input id="sim-expenses" type="number" min="0" step="0.01" value="'+assumedExpenses+'"></label><label>Estimated tax rate (%)<input id="sim-tax" type="number" min="0" max="100" step="0.1" value="0"></label><label>Scenario<select id="sim-scenario"><option value="1">Base estimate</option><option value="0.8">Conservative (80% revenue)</option><option value="1.2">Optimistic (120% revenue)</option></select></label></div><div id="sim-output" aria-live="polite"></div><p class="muted">Estimates only. Taxes vary by jurisdiction and legal structure. Contributions are not automatically profits. Where negotiated profit shares do not total 100%, the simulation uses contribution-value weights provisionally.</p></section>';
+  };
+
   const section=(name,inner)=>'<section class="projection-panel"><h3>'+name+'</h3>'+inner+'</section>';
   root.innerHTML='<div class="projection-summary"><h2>'+esc(p.title)+'</h2><p>Category: '+esc(p.category||'General')+' · Currency: '+esc(currency)+'</p><p class="muted">Projection is an estimate, not a guaranteed return. Contribution percentages are calculated from agreed values; negotiated profit shares may differ.</p></div>'+
   section('1. Collabo Projection','<div class="projection-metrics"><div><small>Projected revenue</small><strong>'+money(s.projected_revenue,currency)+'</strong></div><div><small>Projected expenses</small><strong>'+money(s.projected_expenses,currency)+'</strong></div><div><small>Projected profit</small><strong>'+money(projectedProfit,currency)+'</strong></div><div><small>Projected participant pool after 5% success fee</small><strong>'+money(Math.max(0,projectedProfit)-feeProjected,currency)+'</strong></div></div>')+
+  scenarioSection()+
   section('2. Initiator and collaborator contributions','<p>Every participant, including the initiator, is valued on the same basis. The contribution share updates when new participants are added.</p><div class="projection-scroll"><table><thead><tr><th>Participant</th><th>Role</th><th>Contribution</th><th>Value</th><th>Value share</th><th>Agreed profit share</th></tr></thead><tbody>'+people.map(x=>'<tr><td>'+esc(x.display_name)+'</td><td>'+esc(x.role_name)+'</td><td>'+esc(x.contribution_type)+' — '+esc(x.contribution_details||'')+'</td><td>'+money(x.contribution_value,currency)+'</td><td>'+(totalValue?((Number(x.contribution_value)/totalValue)*100).toFixed(1):'0')+'%</td><td>'+(x.profit_share_percent==null?'Not agreed':Number(x.profit_share_percent)+'%')+'</td></tr>').join('')+'</tbody></table></div><p><strong>Total valued contributions:</strong> '+money(totalValue,currency)+' · <strong>Agreed profit shares:</strong> '+shareTotal.toFixed(1)+'% of 100%</p>')+
   section('3. Project milestones','<div>'+milestones.map(x=>'<article><strong>'+esc(x.title)+'</strong> · '+esc(x.stage)+'<p>'+esc(x.notes||'')+'</p></article>').join('')+(milestones.length?'':'<p>No milestones recorded yet.</p>')+'</div>')+
   (signed?section('4. Actual income and expenses','<div class="projection-metrics"><div><small>Income received</small><strong>'+money(actualIncome,currency)+'</strong></div><div><small>Expenses recorded</small><strong>'+money(actualExpenses,currency)+'</strong></div><div><small>Actual profit/loss</small><strong>'+money(actualProfit,currency)+'</strong></div><div><small>Estimated distributable profit after 5% fee</small><strong>'+money(distributable,currency)+'</strong></div></div><div class="projection-scroll"><table><thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Amount</th></tr></thead><tbody>'+entries.map(x=>'<tr><td>'+esc(x.entry_date)+'</td><td>'+esc(x.entry_type)+'</td><td>'+esc(x.category)+'</td><td>'+esc(x.description)+'</td><td>'+money(x.amount,currency)+'</td></tr>').join('')+'</tbody></table></div>')+
@@ -57,7 +71,21 @@ async function showProjection(projectId){
   section('Add project milestone','<form id="projection-milestone-form"><label>Milestone<input name="title" required placeholder="Harvest complete / Venue booked"></label><label>Status<select name="stage"><option value="planned">Planned</option><option value="ongoing">Ongoing</option><option value="completed">Completed</option></select></label><label>Notes<input name="notes"></label><button class="primary">Add milestone</button></form>')+
   section('Record a completed participant payment','<form id="projection-payment-form"><label>Participant<select name="participant_id" required>'+people.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.display_name)+'</option>').join('')+'</select></label><label>Amount paid<input name="amount" type="number" min="0.01" step="0.01" required></label><label>Payment reference<input name="reference" required placeholder="Bank or transfer confirmation"></label><button class="primary">Record payment</button></form>')+
   '<p id="projection-feedback" role="status"></p></div>':'');
-  if(data.is_owner){
+  
+  const sim=root.querySelector('#collabo-simulator');
+  if(sim){
+   const renderSim=()=>{
+    const revenue=Math.max(0,Number(sim.querySelector('#sim-revenue').value)||0)*Number(sim.querySelector('#sim-scenario').value);
+    const expenses=Math.max(0,Number(sim.querySelector('#sim-expenses').value)||0);
+    const rate=Math.max(0,Math.min(100,Number(sim.querySelector('#sim-tax').value)||0));
+    const result=simulate(revenue,expenses,rate);
+    const rows=result.shares.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.role)+'</td><td>'+money(x.value,currency)+'</td><td>'+x.pct.toFixed(2)+'%</td><td>'+money(result.pool*x.pct/100,currency)+'</td></tr>').join('');
+    sim.querySelector('#sim-output').innerHTML='<div class="projection-metrics"><div><small>Projected revenue</small><strong>'+money(revenue,currency)+'</strong></div><div><small>Projected expenses</small><strong>'+money(expenses,currency)+'</strong></div><div><small>Profit / loss</small><strong>'+money(result.profit,currency)+'</strong></div><div><small>5% fee (positive profit only)</small><strong>'+money(result.fee,currency)+'</strong></div><div><small>Estimated tax</small><strong>'+money(result.tax,currency)+'</strong></div><div><small>Estimated participant profit pool</small><strong>'+money(result.pool,currency)+'</strong></div></div><div class="projection-scroll"><table><thead><tr><th>Participant</th><th>Role</th><th>Contribution</th><th>Share</th><th>Projected profit</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+(simulationParticipants.length===0?'<p>No participant contributions recorded. Add initiator and collaborator contributions to calculate shares.</p>':'')+(!result.validAgreed?'<p class="muted">Provisional contribution-based distribution; negotiated shares not finalized.</p>':'');
+   };
+   sim.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',renderSim));
+   renderSim();
+  }
+if(data.is_owner){
    root.querySelector('[name="closure_status"]').value=s.closure_status||'active';
    const date=root.querySelector('[name="entry_date"]');date.value=new Date().toISOString().slice(0,10);
    for(const [formId,path,method] of [['projection-settings-form','settings','PUT'],['projection-participant-form','participants','POST'],['projection-entry-form','entries','POST'],['projection-milestone-form','milestones','POST'],['projection-payment-form','payments','POST']]){
