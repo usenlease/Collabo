@@ -464,7 +464,7 @@ export default {
     if(!chatTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
     if(request.method==='GET'){
      const first=url.searchParams.get('first')==='1';
-     const rows=await env.DB.prepare(`SELECT m.id,m.sender_clerk_id,m.body,m.created_at,CASE WHEN m.sender_clerk_id=? THEN 'Initiator' ELSE COALESCE((SELECT GROUP_CONCAT(role_name, ', ') FROM (SELECT DISTINCT n.item_name AS role_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=m.project_id AND a.applicant_clerk_id=m.sender_clerk_id AND a.status='approved' ORDER BY n.item_name)), 'Collaborator') END AS sender_role FROM project_team_messages m WHERE m.project_id=? ORDER BY created_at '+(first?'ASC':'DESC')+',id '+(first?'ASC':'DESC')+` LIMIT 100`).bind(p.owner_clerk_id,chat[1]).all();
+     const rows=await env.DB.prepare(`SELECT m.id,m.sender_clerk_id,m.body,m.created_at,CASE WHEN m.sender_clerk_id=? THEN 'Initiator' ELSE COALESCE((SELECT GROUP_CONCAT(role_name, ', ') FROM (SELECT DISTINCT n.item_name AS role_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=m.project_id AND a.applicant_clerk_id=m.sender_clerk_id AND a.status='approved' ORDER BY n.item_name)), 'Collaborator') END AS sender_role FROM project_team_messages m WHERE m.project_id=? ORDER BY created_at ${first?'ASC':'DESC'},id ${first?'ASC':'DESC'} LIMIT 100`).bind(p.owner_clerk_id,chat[1]).all();
      return json({messages:first?rows.results:rows.results.reverse(),first_page:first});
     }
     const b=await body(request);if(typeof b?.message!=='string'||!b.message.trim()||b.message.length>2000)return json({error:'Message must be 1–2000 characters'},400);
