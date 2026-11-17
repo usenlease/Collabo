@@ -22,7 +22,7 @@ async function showProjection(projectId){
  const money=(v,currency)=>currency+' '+Number(v||0).toLocaleString(undefined,{maximumFractionDigits:2});
  try{
   const endpoint=signed?'/projects/'+projectId+'/projection':'/public/projects/'+projectId+'/projection';
-  const data=signed?await api(endpoint):await fetch('/api'+endpoint).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Projection unavailable');return d});
+  let data;if(signed){try{data=await api(endpoint)}catch(error){if(!/Only project participants/.test(error.message))throw error;data=await fetch('/api/public/projects/'+projectId+'/projection').then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Projection unavailable');return d})}}else{data=await fetch('/api'+endpoint).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Projection unavailable');return d})}
   const p=data.project,s=data.settings||{},people=data.participants||[],entries=data.entries||[],milestones=data.milestones||[],payments=data.payments||[],currency=s.currency||'KES';
   const totalValue=people.reduce((n,x)=>n+Number(x.contribution_value||0),0);
   const actualIncome=entries.filter(x=>x.entry_type==='income').reduce((n,x)=>n+Number(x.amount),0);
