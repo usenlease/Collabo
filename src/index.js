@@ -371,6 +371,16 @@ export default {
     await env.DB.batch(needs.map((n,i)=>env.DB.prepare('INSERT INTO project_needs(id,project_id,position,item_name,quantity,details) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),addNeedsRoute[1],i+1,clean(n.item_name,120),n.quantity,clean(n.details,1000))));
     return json({saved:true,role_count:needs.length},201);
    }
+   if(url.pathname==='/api/notifications'&&request.method==='GET'){
+    const rows=await env.DB.prepare("SELECT id,title,message,link,created_at,read_at FROM user_notifications WHERE recipient_clerk_id=? ORDER BY created_at DESC,id DESC LIMIT 100").bind(user).all();
+    const count=await env.DB.prepare("SELECT COUNT(*) AS total FROM user_notifications WHERE recipient_clerk_id=? AND read_at IS NULL").bind(user).first();
+    return json({notifications:rows.results,unread:count.total});
+   }
+   const notificationRead=/^\/api\/notifications\/([a-f0-9-]{36})\/read$/.exec(url.pathname);
+   if(notificationRead&&request.method==='POST'){
+    await env.DB.prepare("UPDATE user_notifications SET read_at=datetime('now') WHERE id=? AND recipient_clerk_id=?").bind(notificationRead[1],user).run();
+    return json({ok:true});
+   }
    const rolesRoute=/^\/api\/projects\/([a-f0-9-]{36})\/role-applications$/.exec(url.pathname);
    if(rolesRoute&&request.method==='POST'){
     const p=await env.DB.prepare('SELECT owner_clerk_id,status FROM projects WHERE id=?').bind(rolesRoute[1]).first();
@@ -386,6 +396,7 @@ export default {
     if(!Number.isInteger(qty)||qty<1||qty>n.quantity||!Number.isFinite(amount)||amount<0||!['hour','day','month','project','item'].includes(b.rate_period)||b.currency!=='USD'||!clean(b.experience,2000))return json({error:'Enter valid experience, quantity, currency and rate'},400);
     try{await env.DB.prepare('INSERT INTO role_applications(id,project_id,need_id,applicant_clerk_id,experience,offered_quantity,rate_amount,currency,rate_period,message) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(),rolesRoute[1],n.id,user,clean(b.experience,2000),qty,amount,b.currency,b.rate_period,clean(b.message,2000)).run();}
     catch(e){console.error('Role application insert failed',e);return json({error:'Your application could not be saved. Your entered information is preserved; please try again or contact support.',code:'ROLE_APPLICATION_SAVE_FAILED'},503)}
+    try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),p.owner_clerk_id,'New collaborator application','A collaborator has applied to join your Collabo.','#project/'+rolesRoute[1]).run();}catch(e){console.error('Application notification failed',e)}
     return json({submitted:true},201);
    }
    if(rolesRoute&&request.method==='GET'){
@@ -402,7 +413,7 @@ export default {
     const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(decision[1]).first();
     if(!p||p.owner_clerk_id!==user)return json({error:'Only the Initiator can decide'},403);
     const b=await body(request);if(!['approved','declined'].includes(b?.status))return json({error:'Invalid decision'},400);
-    const a=await env.DB.prepare("SELECT a.id,a.status,a.need_id,a.offered_quantity,n.quantity FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.id=? AND a.project_id=?").bind(decision[2],decision[1]).first();
+    const a=await env.DB.prepare("SELECT a.id,a.status,a.need_id,a.applicant_clerk_id,a.offered_quantity,n.quantity,n.item_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.id=? AND a.project_id=?").bind(decision[2],decision[1]).first();
     if(!a||a.status!=='pending')return json({error:'Application is not pending'},409);
     if(b.status==='approved'){
      const filled=await env.DB.prepare("SELECT COALESCE(SUM(offered_quantity),0) AS total FROM role_applications WHERE need_id=? AND status='approved'").bind(a.need_id).first();
@@ -410,6 +421,7 @@ export default {
     }
     const result=await env.DB.prepare("UPDATE role_applications SET status=?,updated_at=datetime('now') WHERE id=? AND status='pending'").bind(b.status,a.id).run();
     if(!result.meta.changes)return json({error:'Application already decided'},409);
+    try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),a.applicant_clerk_id,b.status==='approved'?'Application accepted':'Application declined','Your application for '+a.item_name+' was '+(b.status==='approved'?'accepted':'declined')+'.','#project/'+decision[1]).run();}catch(e){console.error('Decision notification failed',e)}
     return json({updated:true,status:b.status});
    }
    const presence=/^\/api\/projects\/([a-f0-9-]{36})\/team-presence$/.exec(url.pathname);
