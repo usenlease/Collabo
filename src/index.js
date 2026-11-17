@@ -380,7 +380,7 @@ export default {
     const n=await env.DB.prepare('SELECT id,quantity FROM project_needs WHERE id=? AND project_id=?').bind(b?.need_id,rolesRoute[1]).first();
     if(!n)return json({error:'Choose a listed role or resource'},400);
     const qty=Number(b.offered_quantity),amount=Number(b.rate_amount);
-    if(!Number.isInteger(qty)||qty<1||qty>n.quantity||!Number.isFinite(amount)||amount<0||!['hour','day','month','project','item'].includes(b.rate_period)||!['USD','KES','GBP','EUR','CAD','AUD','INR'].includes(b.currency)||!clean(b.experience,2000))return json({error:'Enter valid experience, quantity, currency and rate'},400);
+    if(!Number.isInteger(qty)||qty<1||qty>n.quantity||!Number.isFinite(amount)||amount<0||!['hour','day','month','project','item'].includes(b.rate_period)||b.currency!=='USD'||!clean(b.experience,2000))return json({error:'Enter valid experience, quantity, currency and rate'},400);
     try{await env.DB.prepare('INSERT INTO role_applications(id,project_id,need_id,applicant_clerk_id,experience,offered_quantity,rate_amount,currency,rate_period,message) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(),rolesRoute[1],n.id,user,clean(b.experience,2000),qty,amount,b.currency,b.rate_period,clean(b.message,2000)).run();}
     catch{return json({error:'You already applied for this role or the application failed'},409)}
     return json({submitted:true},201);
