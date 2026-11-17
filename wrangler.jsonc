@@ -6,7 +6,9 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": [
+      "/api/*"
+    ]
   },
   "r2_buckets": [
     {
@@ -35,7 +37,13 @@
           "binding": "PROJECT_PICTURES",
           "bucket_name": "collabo-project-pictures"
         }
-      ]
+      ],
+      "ai": {
+        "binding": "AI"
+      }
     }
+  },
+  "ai": {
+    "binding": "AI"
   }
 }
