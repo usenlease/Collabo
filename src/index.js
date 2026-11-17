@@ -120,6 +120,12 @@ export default {
       const participant=await env.DB.prepare('SELECT id FROM collabo_projection_participants WHERE id=? AND project_id=?').bind(clean(data.participant_id,60),id).first();
       const amount=Number(data.amount),reference=clean(data.reference,160);
       if(!participant||!Number.isFinite(amount)||amount<=0||amount>1e12||!reference)return json({error:'Choose a participant, payment amount and reference'},400);
+      const shares=await env.DB.prepare('SELECT profit_share_percent FROM collabo_projection_participants WHERE id=? AND project_id=?').bind(participant.id,id).first();
+      if(shares.profit_share_percent==null)return json({error:'Agree the participant profit share before recording a distribution'},409);
+      const profit=await env.DB.prepare("SELECT COALESCE(SUM(CASE WHEN entry_type='income' THEN amount ELSE -amount END),0) AS amount FROM collabo_projection_entries WHERE project_id=?").bind(id).first();
+      const already=await env.DB.prepare('SELECT COALESCE(SUM(amount),0) AS amount FROM collabo_projection_payments WHERE project_id=? AND participant_id=?').bind(id,participant.id).first();
+      const limit=Math.max(0,profit.amount)*.95*Number(shares.profit_share_percent)/100;
+      if(already.amount+amount>limit+0.01)return json({error:'Payment exceeds the participant’s calculated profit allocation'},409);
       await env.DB.prepare('INSERT INTO collabo_projection_payments(id,project_id,participant_id,amount,reference,created_by) VALUES(?,?,?,?,?,?)').bind(uid,id,participant.id,amount,reference,user).run();
      }
      return json({saved:true,id:uid},201);
