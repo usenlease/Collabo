@@ -48,6 +48,23 @@ export default {
       return json({project:p,needs});
     }catch{return json({error:'Project preview temporarily unavailable'},503)}
   }
+
+  const publicProjection=/^\/api\/public\/projects\/([a-f0-9-]{36})\/projection$/.exec(url.pathname);
+  if(publicProjection&&request.method==='GET'){
+   try{
+    const id=publicProjection[1];
+    const project=await env.DB.prepare("SELECT id,title,category FROM projects WHERE id=? AND status='open'").bind(id).first();
+    if(!project)return json({error:'Project projection unavailable'},404);
+    const table=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='collabo_projection_settings'").first();
+    if(!table)return json({project,settings:{currency:'KES',projected_revenue:0,projected_expenses:0},participants:[],milestones:[]});
+    const [settings,participants,milestones]=await Promise.all([
+     env.DB.prepare('SELECT currency,projected_revenue,projected_expenses,success_fee_percent FROM collabo_projection_settings WHERE project_id=?').bind(id).first(),
+     env.DB.prepare('SELECT display_name,role_name,contribution_type,contribution_details,contribution_value,profit_share_percent FROM collabo_projection_participants WHERE project_id=? ORDER BY created_at').bind(id).all(),
+     env.DB.prepare('SELECT title,stage,notes FROM collabo_projection_milestones WHERE project_id=? ORDER BY created_at').bind(id).all()
+    ]);
+    return json({project,settings:settings||{currency:'KES',projected_revenue:0,projected_expenses:0,success_fee_percent:5},participants:participants.results,milestones:milestones.results});
+   }catch(e){console.error('Public projection failure',e);return json({error:'Projection temporarily unavailable'},503)}
+  }
   const user=await identity(request,env);
   if(!user) return json({error:'Sign in required'},401);
   try {
