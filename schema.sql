@@ -30,3 +30,12 @@ CREATE TABLE IF NOT EXISTS milestones (
  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','complete')),
  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Ephemeral group-chat presence: online dots expire after 40 seconds.
+CREATE TABLE IF NOT EXISTS project_chat_presence (
+ project_id TEXT NOT NULL,
+ user_id TEXT NOT NULL,
+ last_seen_at INTEGER NOT NULL DEFAULT (unixepoch()),
+ PRIMARY KEY(project_id,user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_project_chat_presence_active ON project_chat_presence(project_id,last_seen_at);

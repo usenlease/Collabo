@@ -409,6 +409,30 @@ export default {
     if(!result.meta.changes)return json({error:'Application already decided'},409);
     return json({updated:true,status:b.status});
    }
+   const presence=/^\/api\/projects\/([a-f0-9-]{36})\/team-presence$/.exec(url.pathname);
+   if(presence&&(request.method==='GET'||request.method==='POST')){
+    const project=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(presence[1]).first();
+    if(!project)return json({error:'Project not found'},404);
+    const owner=project.owner_clerk_id===user;
+    if(!owner){
+     const member=await env.DB.prepare("SELECT 1 FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(presence[1],user).first();
+     if(!member)return json({error:'Only approved project members may view chat presence'},403);
+    }
+    const exists=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_chat_presence'").first();
+    if(!exists)return json({error:'Chat presence requires database setup',code:'CHAT_PRESENCE_SETUP_REQUIRED'},503);
+    if(request.method==='POST'){
+     const payload=await body(request);
+     if(payload?.active===false)await env.DB.prepare('DELETE FROM project_chat_presence WHERE project_id=? AND user_id=?').bind(presence[1],user).run();
+     else await env.DB.prepare("INSERT INTO project_chat_presence(project_id,user_id,last_seen_at) VALUES(?,?,unixepoch()) ON CONFLICT(project_id,user_id) DO UPDATE SET last_seen_at=unixepoch()").bind(presence[1],user).run();
+    }
+    const [active,approved]=await Promise.all([
+     env.DB.prepare('SELECT user_id FROM project_chat_presence WHERE project_id=? AND last_seen_at>=unixepoch()-40').bind(presence[1]).all(),
+     env.DB.prepare("SELECT a.applicant_clerk_id,GROUP_CONCAT(DISTINCT n.item_name) AS roles FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=? AND a.status='approved' GROUP BY a.applicant_clerk_id").bind(presence[1]).all()
+    ]);
+    const members=[{id:project.owner_clerk_id,role:'initiator'},...approved.results.filter(x=>x.applicant_clerk_id!==project.owner_clerk_id).map(x=>({id:x.applicant_clerk_id,role:'collaborator',label:x.roles||'Role not specified'}))];
+    const present=new Set(active.results.map(x=>x.user_id));
+    return json({joined:members.length,collaborators_joined:members.length-1,active:members.filter(x=>present.has(x.id)).map(x=>({role:x.role,label:x.role==='initiator'?'Initiator':x.label,id:x.id})),you:user});
+   }
    const chat=/^\/api\/projects\/([a-f0-9-]{36})\/team-messages$/.exec(url.pathname);
    if(chat&&(request.method==='GET'||request.method==='POST')){
     const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(chat[1]).first();
@@ -422,8 +446,9 @@ export default {
     const chatTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_team_messages'").first();
     if(!chatTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
     if(request.method==='GET'){
-     const rows=await env.DB.prepare('SELECT id,sender_clerk_id,body,created_at FROM project_team_messages WHERE project_id=? ORDER BY created_at DESC LIMIT 100').bind(chat[1]).all();
-     return json({messages:rows.results.reverse()});
+     const first=url.searchParams.get('first')==='1';
+     const rows=await env.DB.prepare('SELECT id,sender_clerk_id,body,created_at FROM project_team_messages WHERE project_id=? ORDER BY created_at '+(first?'ASC':'DESC')+',id '+(first?'ASC':'DESC')+' LIMIT 100').bind(chat[1]).all();
+     return json({messages:first?rows.results:rows.results.reverse(),first_page:first});
     }
     const b=await body(request);if(typeof b?.message!=='string'||!b.message.trim()||b.message.length>2000)return json({error:'Message must be 1–2000 characters'},400);
     await env.DB.prepare('INSERT INTO project_team_messages(id,project_id,sender_clerk_id,body) VALUES(?,?,?,?)').bind(crypto.randomUUID(),chat[1],user,b.message.trim()).run();
