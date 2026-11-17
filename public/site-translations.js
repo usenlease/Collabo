@@ -51,82 +51,86 @@ const known={
 };
 function eligible(node){
  const el=node.parentElement;
- if(!el||skip.has(el.tagName)||el.closest('[contenteditable="true"],[data-no-translate],.cc-info'))return false;
- if(el.closest('select')||el.closest('[data-i], [data-label]'))return false;
- const t=node.nodeValue||'';
- return t.trim().length>1 && /[A-Za-z]/.test(t) && t.length<700;
+ if(!el||skip.has(el.tagName)||el.closest('[contenteditable="true"],[data-no-translate],.cc-info,select,[data-i],[data-label]'))return false;
+ const value=node.nodeValue||'';
+ return value.trim().length>1 && /[A-Za-z]/.test(value) && value.length<=700;
 }
-function walk(){
- const nodes=[];
+const attrOriginal=new WeakMap();
+function collect(){
+ const nodes=[],attrs=[];
  const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
  while(walker.nextNode()){
-  const node=walker.currentNode;
-  if(!eligible(node))continue;
-  if(!original.has(node))original.set(node,node.nodeValue);
-  nodes.push(node);
+  const n=walker.currentNode;
+  if(!eligible(n))continue;
+  if(!original.has(n))original.set(n,n.nodeValue);
+  nodes.push(n);
  }
- return nodes;
+ for(const el of document.querySelectorAll('input[placeholder],textarea[placeholder],button[title],input[title],[aria-label]')){
+  if(el.closest('[data-no-translate]')||el===picker)continue;
+  for(const attr of ['placeholder','title','aria-label']){
+   const value=el.getAttribute(attr);
+   if(!value||!/[A-Za-z]/.test(value)||value.length>700)continue;
+   let saved=attrOriginal.get(el);if(!saved){saved={};attrOriginal.set(el,saved)}
+   if(!saved[attr])saved[attr]=value;
+   attrs.push({el,attr,source:saved[attr]});
+  }
+ }
+ return {nodes,attrs};
 }
-function lang(){const v=picker.value;return supported.has(v)?v:'en'}
-function restore(){for(const n of walk()){const v=original.get(n);if(n.nodeValue!==v)n.nodeValue=v}}
+function lang(){return supported.has(picker.value)?picker.value:'en'}
+function restore(){
+ const {nodes,attrs}=collect();
+ for(const n of nodes){const value=original.get(n);if(n.nodeValue!==value)n.nodeValue=value}
+ for(const a of attrs)a.el.setAttribute(a.attr,a.source);
+}
 async function translateBatch(texts,target){
- const key=target+'|'+JSON.stringify(texts);
- if(cache.has(key))return cache.get(key);
  const response=await fetch('/api/translate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({target,texts})});
- if(!response.ok)throw Error('Translation unavailable');
- const data=await response.json();
- if(!Array.isArray(data.translations)||data.translations.length!==texts.length)throw Error('Invalid translation');
- cache.set(key,data.translations);
- return data.translations;
+ if(!response.ok)throw Error('Translator unavailable: '+response.status);
+ const result=await response.json();
+ if(!Array.isArray(result.translations)||result.translations.length!==texts.length)throw Error('Invalid translator response');
+ return result.translations;
 }
 async function run(){
  if(busy){scheduled=true;return}
  busy=true;
- const current=++generation,target=lang();
+ const version=++generation,target=lang();
  try{
   if(target==='en'){restore();return}
-  const nodes=walk().filter(n=>n.isConnected);
-  const missing=nodes.filter(n=>!cache.has(target+'|'+JSON.stringify([original.get(n).trim()])));
-  for(let i=0;i<missing.length;i+=8){
-   if(current!==generation||target!==lang())return;
-   const group=missing.slice(i,i+8);
-   const texts=group.map(n=>original.get(n).trim());
-   const translations=new Array(texts.length);
-   const unresolved=[];
-   texts.forEach((t,j)=>{if(known[target]?.[t])translations[j]=known[target][t];else unresolved.push(j)});
-   if(unresolved.length){
-     try{
-       const result=await translateBatch(unresolved.map(j=>texts[j]),target);
-       unresolved.forEach((j,k)=>{translations[j]=result[k]});
-     }catch(e){console.warn('Cloud Collabo translation:',e.message)}
-   }
-   if(target!==lang())return;
-   group.forEach((node,j)=>{
-     if(!node.isConnected||!translations[j])return;
-     const source=original.get(node),trim=source.trim();
-     node.nodeValue=source.replace(trim,translations[j]);
-     cache.set(target+'|'+JSON.stringify([trim]),[translations[j]]);
-   });
+  const {nodes,attrs}=collect();
+  const tasks=[
+   ...nodes.map(n=>({source:original.get(n).trim(),apply:value=>{if(n.isConnected)n.nodeValue=original.get(n).replace(original.get(n).trim(),value)}})),
+   ...attrs.map(a=>({source:a.source.trim(),apply:value=>{if(a.el.isConnected)a.el.setAttribute(a.attr,value)}}))
+  ].filter(x=>x.source);
+  const needed=[...new Set(tasks.map(x=>x.source))].filter(text=>!cache.has(target+'|'+text));
+  // Apply built-in translations immediately, even if Workers AI is unavailable.
+  for(const text of needed){if(known[target]?.[text])cache.set(target+'|'+text,known[target][text])}
+  for(const task of tasks){const t=cache.get(target+'|'+task.source);if(t)task.apply(t)}
+  const pending=needed.filter(text=>!cache.has(target+'|'+text));
+  for(let i=0;i<pending.length;i+=8){
+   if(target!==lang()||version!==generation)return;
+   const batch=pending.slice(i,i+8);
+   try{
+    const translated=await translateBatch(batch,target);
+    if(target!==lang())return;
+    translated.forEach((t,j)=>{if(typeof t==='string'&&t.trim())cache.set(target+'|'+batch[j],t)});
+    for(const task of tasks){const value=cache.get(target+'|'+task.source);if(value)task.apply(value)}
+   }catch(error){console.warn('Cloud Collabo translator:',error);break}
   }
-  if(target===lang()){
-   for(const n of nodes){
-    const source=original.get(n),trim=source.trim();
-    const translation=cache.get(target+'|'+JSON.stringify([trim]));
-    if(translation&&n.isConnected)n.nodeValue=source.replace(trim,translation[0]);
-   }
-  }
- }finally{busy=false;if(scheduled){scheduled=false;queueMicrotask(run)}}
+ }finally{
+  busy=false;
+  if(scheduled){scheduled=false;setTimeout(run,100)}
+ }
 }
-function schedule(){if(scheduled)return;scheduled=true;setTimeout(()=>{scheduled=false;run()},200)}
+function schedule(){
+ if(scheduled)return;
+ scheduled=true;
+ setTimeout(()=>{scheduled=false;run()},180);
+}
 picker.addEventListener('change',()=>{generation++;restore();schedule()});
 const observer=new MutationObserver(records=>{
- let changed=false;
- for(const r of records){
-  if(r.type==='childList'&&r.addedNodes.length)changed=true;
-  if(r.type==='characterData'&&r.target.parentElement&&!original.has(r.target))changed=true;
- }
- if(changed&&lang()!=='en')schedule();
+ if(lang()==='en')return;
+ if(records.some(r=>r.type==='childList'&&r.addedNodes.length))schedule();
 });
-observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+observer.observe(document.body,{childList:true,subtree:true});
 schedule();
 })();
