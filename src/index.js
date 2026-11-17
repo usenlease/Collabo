@@ -51,6 +51,79 @@ export default {
   const user=await identity(request,env);
   if(!user) return json({error:'Sign in required'},401);
   try {
+
+   const projection=/^\/api\/projects\/([a-f0-9-]{36})\/projection(?:\/(participants|entries|milestones|payments|settings))?$/.exec(url.pathname);
+   if(projection){
+    const id=projection[1],section=projection[2]||'summary';
+    const project=await env.DB.prepare('SELECT id,title,category,owner_clerk_id FROM projects WHERE id=?').bind(id).first();
+    if(!project)return json({error:'Project not found'},404);
+    const owner=project.owner_clerk_id===user;
+    let member=false;
+    if(!owner){
+     const approved=await env.DB.prepare("SELECT 1 FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(id,user).first();
+     member=!!approved;
+    }
+    if(!owner&&!member)return json({error:'Only project participants may access actual finances'},403);
+    const configured=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='collabo_projection_settings'").first();
+    if(!configured)return json({error:'Apply migration 0011 to enable Project Projection'},503);
+    if(request.method==='GET'&&section==='summary'){
+     const [settings,participants,entries,milestones,payments]=await Promise.all([
+      env.DB.prepare('SELECT * FROM collabo_projection_settings WHERE project_id=?').bind(id).first(),
+      env.DB.prepare('SELECT * FROM collabo_projection_participants WHERE project_id=? ORDER BY created_at').bind(id).all(),
+      env.DB.prepare('SELECT * FROM collabo_projection_entries WHERE project_id=? ORDER BY entry_date DESC,created_at DESC').bind(id).all(),
+      env.DB.prepare('SELECT * FROM collabo_projection_milestones WHERE project_id=? ORDER BY created_at').bind(id).all(),
+      env.DB.prepare('SELECT * FROM collabo_projection_payments WHERE project_id=? ORDER BY created_at').bind(id).all()
+     ]);
+     return json({project:{id:project.id,title:project.title,category:project.category},is_owner:owner,settings:settings||{currency:'KES',projected_revenue:0,projected_expenses:0,success_fee_percent:5,closure_status:'active'},participants:participants.results,entries:entries.results,milestones:milestones.results,payments:payments.results});
+    }
+    if(!owner)return json({error:'Only the initiator can edit this workspace'},403);
+    const current=await env.DB.prepare('SELECT closure_status FROM collabo_projection_settings WHERE project_id=?').bind(id).first();
+    if(current?.closure_status==='closed')return json({error:'Closed project records cannot be changed'},409);
+    if(request.method==='POST'&&['participants','entries','milestones','payments'].includes(section)){
+     const data=await body(request);if(!data||typeof data!=='object')return json({error:'Invalid entry'},400);
+     const uid=crypto.randomUUID();
+     if(section==='participants'){
+      const name=clean(data.display_name,120),role=clean(data.role_name,120),type=clean(data.contribution_type,100),details=clean(data.contribution_details,500),value=Number(data.contribution_value);
+      const share=data.profit_share_percent===''||data.profit_share_percent==null?null:Number(data.profit_share_percent);
+      if(!name||!role||!type||!Number.isFinite(value)||value<0||value>1e12||(share!==null&&(!Number.isFinite(share)||share<0||share>100)))return json({error:'Enter participant, role, contribution type, value and optional share'},400);
+      if(share!==null){
+       const total=await env.DB.prepare('SELECT COALESCE(SUM(profit_share_percent),0) AS total FROM collabo_projection_participants WHERE project_id=?').bind(id).first();
+       if(total.total+share>100.000001)return json({error:'Agreed profit shares cannot exceed 100%'},400);
+      }
+      await env.DB.prepare('INSERT INTO collabo_projection_participants(id,project_id,display_name,role_name,contribution_type,contribution_details,contribution_value,profit_share_percent) VALUES(?,?,?,?,?,?,?,?)').bind(uid,id,name,role,type,details,value,share).run();
+     }else if(section==='entries'){
+      const type=data.entry_type,category=clean(data.category,100),description=clean(data.description,500),amount=Number(data.amount),date=clean(data.entry_date,10);
+      if(!['income','expense'].includes(type)||!category||!description||!Number.isFinite(amount)||amount<=0||amount>1e12||!/^\d{4}-\d{2}-\d{2}$/.test(date))return json({error:'Enter valid type, category, description, date and positive amount'},400);
+      await env.DB.prepare('INSERT INTO collabo_projection_entries(id,project_id,entry_type,category,description,amount,entry_date,created_by) VALUES(?,?,?,?,?,?,?,?)').bind(uid,id,type,category,description,amount,date,user).run();
+     }else if(section==='milestones'){
+      const title=clean(data.title,160),notes=clean(data.notes,500),stage=data.stage;
+      if(!title||!['planned','ongoing','completed'].includes(stage))return json({error:'Enter a milestone title and status'},400);
+      await env.DB.prepare('INSERT INTO collabo_projection_milestones(id,project_id,title,stage,notes) VALUES(?,?,?,?,?)').bind(uid,id,title,stage,notes).run();
+     }else{
+      const participant=await env.DB.prepare('SELECT id FROM collabo_projection_participants WHERE id=? AND project_id=?').bind(clean(data.participant_id,60),id).first();
+      const amount=Number(data.amount),reference=clean(data.reference,160);
+      if(!participant||!Number.isFinite(amount)||amount<=0||amount>1e12||!reference)return json({error:'Choose a participant, payment amount and reference'},400);
+      await env.DB.prepare('INSERT INTO collabo_projection_payments(id,project_id,participant_id,amount,reference,created_by) VALUES(?,?,?,?,?,?)').bind(uid,id,participant.id,amount,reference,user).run();
+     }
+     return json({saved:true,id:uid},201);
+    }
+    if(request.method==='PUT'&&section==='settings'){
+     const data=await body(request),currency=clean(data?.currency,3).toUpperCase(),revenue=Number(data?.projected_revenue),expenses=Number(data?.projected_expenses),status=data?.closure_status;
+     if(!/^[A-Z]{3}$/.test(currency)||![revenue,expenses].every(v=>Number.isFinite(v)&&v>=0&&v<=1e12)||!['active','review','closed'].includes(status))return json({error:'Invalid projection settings'},400);
+     if(status==='closed'){
+      const shares=await env.DB.prepare('SELECT COUNT(*) AS count,COALESCE(SUM(profit_share_percent),0) AS total FROM collabo_projection_participants WHERE project_id=?').bind(id).first();
+      if(!shares.count||Math.abs(shares.total-100)>0.001)return json({error:'Agree and allocate 100% of profit shares before closure'},409);
+      const amounts=await env.DB.prepare("SELECT COALESCE(SUM(CASE WHEN entry_type='income' THEN amount ELSE -amount END),0) AS profit FROM collabo_projection_entries WHERE project_id=?").bind(id).first();
+      if(amounts.profit<0)return json({error:'A loss requires a separate agreed settlement before closure'},409);
+      const payments=await env.DB.prepare('SELECT COALESCE(SUM(amount),0) AS total FROM collabo_projection_payments WHERE project_id=?').bind(id).first();
+      const due=Math.max(0,amounts.profit)*.95;
+      if(payments.total+0.01<due)return json({error:'Record the collaborator distributions before closure'},409);
+     }
+     await env.DB.prepare("INSERT INTO collabo_projection_settings(project_id,currency,projected_revenue,projected_expenses,closure_status) VALUES(?,?,?,?,?) ON CONFLICT(project_id) DO UPDATE SET currency=excluded.currency,projected_revenue=excluded.projected_revenue,projected_expenses=excluded.projected_expenses,closure_status=excluded.closure_status,updated_at=CURRENT_TIMESTAMP").bind(id,currency,revenue,expenses,status).run();
+     return json({saved:true});
+    }
+    return json({error:'Unsupported action'},405);
+   }
    const photoRoute=/^\/api\/projects\/([a-f0-9-]{36})\/pictures(?:\/([1-3]))?$/.exec(url.pathname);
    if(photoRoute&&['GET','PUT','DELETE'].includes(request.method)){
     const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(photoRoute[1]).first();
