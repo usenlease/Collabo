@@ -390,7 +390,7 @@ export default {
     const n=await env.DB.prepare('SELECT id,quantity FROM project_needs WHERE id=? AND project_id=?').bind(b?.need_id,rolesRoute[1]).first();
     if(!n)return json({error:'Choose a listed role or resource'},400);
     const previous=await env.DB.prepare("SELECT id,status FROM role_applications WHERE project_id=? AND need_id=? AND applicant_clerk_id=? LIMIT 1").bind(rolesRoute[1],n.id,user).first();
-    if(previous)return json({error:'You have already applied for this role in this Collabo. Your application status is '+(previous.status==='declined'?'rejected':previous.status)+'. You may apply for a different role.',code:'ROLE_ALREADY_APPLIED',status:previous.status},409);
+    if(previous)return json({error:'You already submitted an application for this particular role.',code:'ROLE_ALREADY_APPLIED',status:previous.status},409);
     const already=await env.DB.prepare("SELECT COALESCE(SUM(offered_quantity),0) AS filled FROM role_applications WHERE need_id=? AND status='approved'").bind(n.id).first();
     const available=Math.max(0,n.quantity-Number(already?.filled||0));
     const qty=Number(b.offered_quantity),amount=Number(b.rate_amount);
