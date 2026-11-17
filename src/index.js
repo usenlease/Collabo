@@ -421,7 +421,7 @@ export default {
     }
     const result=await env.DB.prepare("UPDATE role_applications SET status=?,updated_at=datetime('now') WHERE id=? AND status='pending'").bind(b.status,a.id).run();
     if(!result.meta.changes)return json({error:'Application already decided'},409);
-    try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),a.applicant_clerk_id,b.status==='approved'?'Application accepted':'Application declined','Your application for '+a.item_name+' was '+(b.status==='approved'?'accepted':'declined')+'.','#project/'+decision[1]).run();}catch(e){console.error('Decision notification failed',e)}
+    try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),a.applicant_clerk_id,b.status==='approved'?'Application approved':'Application rejected','Your application for '+a.item_name+(b.status==='approved'?' has been approved. You can now join the Collabo Group Chat.':' was not approved.'),'#project/'+decision[1]).run();}catch(e){console.error('Decision notification failed',e)}
     return json({updated:true,status:b.status});
    }
    const presence=/^\/api\/projects\/([a-f0-9-]{36})\/team-presence$/.exec(url.pathname);
