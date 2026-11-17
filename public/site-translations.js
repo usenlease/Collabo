@@ -106,16 +106,27 @@ async function run(){
   for(const text of needed){if(known[target]?.[text])cache.set(target+'|'+text,known[target][text])}
   for(const task of tasks){const t=cache.get(target+'|'+task.source);if(t)task.apply(t)}
   const pending=needed.filter(text=>!cache.has(target+'|'+text));
-  for(let i=0;i<pending.length;i+=8){
+  // Translate several batches concurrently instead of waiting for each network round-trip.
+  // Keep concurrency bounded to avoid overwhelming the translation endpoint.
+  const batches=[];for(let i=0;i<pending.length;i+=16)batches.push(pending.slice(i,i+16));
+  let cursor=0;
+  const applyCached=()=>{
    if(target!==lang()||version!==generation)return;
-   const batch=pending.slice(i,i+8);
-   try{
-    const translated=await translateBatch(batch,target);
-    if(target!==lang())return;
-    translated.forEach((t,j)=>{if(typeof t==='string'&&t.trim())cache.set(target+'|'+batch[j],t)});
-    for(const task of tasks){const value=cache.get(target+'|'+task.source);if(value)task.apply(value)}
-   }catch(error){console.warn('Cloud Collabo translator:',error);break}
-  }
+   for(const task of tasks){const value=cache.get(target+'|'+task.source);if(value)task.apply(value)}
+  };
+  const worker=async()=>{
+   while(cursor<batches.length){
+    if(target!==lang()||version!==generation)return;
+    const batch=batches[cursor++];
+    try{
+     const translated=await translateBatch(batch,target);
+     if(target!==lang()||version!==generation)return;
+     translated.forEach((t,j)=>{if(typeof t==='string'&&t.trim())cache.set(target+'|'+batch[j],t)});
+     applyCached();
+    }catch(error){console.warn('Cloud Collabo translator:',error);return}
+   }
+  };
+  await Promise.all(Array.from({length:Math.min(3,batches.length)},()=>worker()));
  }finally{
   busy=false;
   if(scheduled){scheduled=false;setTimeout(run,100)}
