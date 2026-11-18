@@ -19,6 +19,21 @@ document.head.appendChild(theme);
 const ownerCompactStyle=document.createElement('style');
 ownerCompactStyle.textContent='.market .owner-controls{padding:12px 14px!important;margin:8px 0!important}.market .owner-controls h3{margin:0 0 8px!important}.market .owner-controls button{margin:4px 5px 4px 0!important}.market #published-pictures{padding:10px 14px!important;margin:8px 0!important}.market #published-pictures h3{margin:2px 0 8px!important}.market #published-pictures label{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:5px 0!important}.market #published-pictures select{max-width:150px}.market #published-pictures input[type=file]{max-width:300px}.market #published-pictures button{margin:4px 0!important}';
 document.head.appendChild(ownerCompactStyle);
+const compactApplicationStyle=document.createElement('style');
+compactApplicationStyle.textContent=`
+/* Compact collaborator application: roughly half the vertical footprint on tablets/desktop. */
+.market #role-apply{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:16px;row-gap:8px;align-items:start;max-width:100%}
+.market #role-apply>h3,.market #role-apply>#apply-feedback{grid-column:1/-1}
+.market #role-apply>h3{margin:2px 0 3px!important}
+.market #role-apply>label{margin:0!important;gap:3px!important;min-width:0}
+.market #role-apply input,.market #role-apply select,.market #role-apply textarea{box-sizing:border-box;width:100%;max-width:none;min-height:38px;padding:7px 10px!important;margin:0!important}
+.market #role-apply textarea{height:68px;min-height:68px;resize:vertical}
+.market #role-apply small{font-size:11px;line-height:1.25}
+.market #role-apply>button[type=submit]{grid-column:1/-1;justify-self:start;margin:3px 0 0!important}
+.market #role-apply>#apply-feedback{margin:0!important}
+@media(max-width:600px){.market #role-apply{grid-template-columns:1fr;row-gap:7px}.market #role-apply>h3,.market #role-apply>#apply-feedback,.market #role-apply>button[type=submit]{grid-column:1}.market #role-apply textarea{height:60px;min-height:60px}}
+`;
+document.head.appendChild(compactApplicationStyle);
 const collaboProgressTrackStyle=document.createElement('style');
 collaboProgressTrackStyle.textContent='.market .collabo-progress-compact h3{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.market .collabo-progress-current{font-size:12px;font-weight:500;color:white}.market .collabo-stage-track{position:relative;height:8px;background:#d4e5d7;border-radius:8px;margin:14px 16px 18px}.market .collabo-stage-fill{height:100%;background:#168444;border-radius:8px;transition:width .3s}.market .collabo-stage-dots{position:absolute;inset:-9px 0;display:flex;justify-content:space-between;align-items:flex-start}.market .collabo-stage-dots span{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#e2e8e3;border:2px solid #b5c4b9;color:#43584a;font-size:12px;font-weight:700}.market .collabo-stage-dots span.reached{background:#168444;border-color:#168444;color:white}.market .collabo-progress-step.is-current{outline:2px solid #168444;outline-offset:-2px}.market .collabo-progress-step.is-upcoming{opacity:.65}.market .collabo-progress-step.is-done{opacity:.9}';
 // The title bar itself is a permanent red-to-yellow-to-green progression.
