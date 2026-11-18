@@ -111,7 +111,17 @@ export default {
     }
     if(request.method==='PUT'){
      const data=await body(request),country=clean(data?.country,2).toUpperCase(),method=clean(data?.method,20);
-     if(country!=='US'||!['direct_deposit','check'].includes(method))return json({error:'Select United States and bank direct deposit or check'},400);
+     const supported={
+      US:['direct_deposit','check','wire'],
+      KE:['bank','mpesa','airtel_money','tkash','wire'],
+      JM:['bank','wire','lynk','jn_pay','mycash'],
+      GB:['bank','wire'],CA:['bank','wire'],IN:['bank','wire'],NG:['bank','wire'],
+      GH:['bank','mtn_momo','telecel_cash','airteltigo_money','wire'],
+      UG:['bank','mtn_momo','airtel_money','wire'],
+      TZ:['bank','mpesa','airtel_money','wire'],
+      ZA:['bank','wire'],PH:['bank','gcash','maya','wire']
+     };
+     if(!supported[country]||!supported[country].includes(method))return json({error:'Select a supported country and payment preference'},400);
      await env.DB.prepare("INSERT INTO collabo_payout_preferences(clerk_user_id,country,method,verification_status,updated_at) VALUES(?,?,?,'not_started',datetime('now')) ON CONFLICT(clerk_user_id) DO UPDATE SET country=excluded.country,method=excluded.method,verification_status='not_started',updated_at=datetime('now')").bind(user,country,method).run();
      return json({saved:true,verification_status:'not_started',message:'Preference saved. No bank account or mailing address has been collected. Verification and actual payout setup will be enabled after a provider is connected.'});
     }
