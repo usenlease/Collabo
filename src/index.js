@@ -525,6 +525,15 @@ export default {
     }
     const b=await body(request);if(typeof b?.message!=='string'||!b.message.trim()||b.message.length>2000)return json({error:'Message must be 1–2000 characters'},400);
     await env.DB.prepare('INSERT INTO project_team_messages(id,project_id,sender_clerk_id,body) VALUES(?,?,?,?)').bind(crypto.randomUUID(),chat[1],user,b.message.trim()).run();
+    try{
+     const recipients=await env.DB.prepare("SELECT DISTINCT applicant_clerk_id AS id FROM role_applications WHERE project_id=? AND status='approved' AND applicant_clerk_id<>? UNION SELECT ? AS id WHERE ?<>?").bind(chat[1],user,p.owner_clerk_id,p.owner_clerk_id,user).all();
+     const project=await env.DB.prepare('SELECT title FROM projects WHERE id=?').bind(chat[1]).first();
+     const senderRole=user===p.owner_clerk_id?'Initiator':(await env.DB.prepare("SELECT n.item_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=? AND a.applicant_clerk_id=? AND a.status='approved' ORDER BY n.item_name LIMIT 1").bind(chat[1],user).first())?.item_name||'Collaborator';
+     const notice=(senderRole+' sent a new group message in '+String(project?.title||'your Collabo').slice(0,90)+'.').slice(0,240);
+     for(const recipient of recipients.results||[]){
+      await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),recipient.id,'New group chat message',notice,'#project/'+chat[1]+'/chat').run();
+     }
+    }catch(e){console.error('Team message notification failed',e)}
     return json({sent:true},201);
    }
    return json({error:'Not found'},404);
