@@ -10,6 +10,25 @@ ownerCompactStyle.textContent='.market .owner-controls{padding:12px 14px!importa
 document.head.appendChild(ownerCompactStyle);
 const collaboProgressTrackStyle=document.createElement('style');
 collaboProgressTrackStyle.textContent='.market .collabo-progress-compact h3{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.market .collabo-progress-current{font-size:12px;font-weight:500;color:white}.market .collabo-stage-track{position:relative;height:8px;background:#d4e5d7;border-radius:8px;margin:14px 16px 18px}.market .collabo-stage-fill{height:100%;background:#168444;border-radius:8px;transition:width .3s}.market .collabo-stage-dots{position:absolute;inset:-9px 0;display:flex;justify-content:space-between;align-items:flex-start}.market .collabo-stage-dots span{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#e2e8e3;border:2px solid #b5c4b9;color:#43584a;font-size:12px;font-weight:700}.market .collabo-stage-dots span.reached{background:#168444;border-color:#168444;color:white}.market .collabo-progress-step.is-current{outline:2px solid #168444;outline-offset:-2px}.market .collabo-progress-step.is-upcoming{opacity:.65}.market .collabo-progress-step.is-done{opacity:.9}';
+// The title bar itself is a permanent red-to-yellow-to-green progression.
+// The white stage pointer moves as approved collaborators join and results complete.
+collaboProgressTrackStyle.textContent += `
+.market .collabo-progress-compact h3{
+ background:linear-gradient(90deg,#c62828 0%,#dc6d28 25%,#e6bf25 50%,#7da83b 75%,#168444 100%)!important;
+ position:relative!important;padding-bottom:17px!important
+}
+.market .collabo-progress-compact h3::after{
+ content:'';position:absolute;bottom:2px;left:var(--stage-position,0%);transform:translateX(-50%);
+ border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:11px solid #fff;
+ transition:left .35s ease
+}
+.market .collabo-progress-compact[data-stage="1"]{--stage-position:2%}
+.market .collabo-progress-compact[data-stage="2"]{--stage-position:50%}
+.market .collabo-progress-compact[data-stage="3"]{--stage-position:98%}
+.market .collabo-progress-compact[data-stage="1"] .collabo-stage-dots span.reached{background:#c62828!important;border-color:#c62828!important}
+.market .collabo-progress-compact[data-stage="2"] .collabo-stage-dots span.reached{background:#e6bf25!important;border-color:#e6bf25!important;color:#222!important}
+.market .collabo-progress-compact[data-stage="3"] .collabo-stage-dots span.reached{background:#168444!important;border-color:#168444!important}
+`;
 document.head.appendChild(collaboProgressTrackStyle);
 const embeddedChatStyle=document.createElement('style');
 embeddedChatStyle.textContent='.market #project-details>article #team-chat{margin:12px 0 0!important;padding:12px!important;background:#f7fbff;border:1px solid #a9cafa;border-radius:10px}.market #project-details>article #team-chat h3{margin:0 0 7px!important;color:#1557a0}.market #project-details>article #chat-messages{max-height:210px!important;overflow-y:auto;padding:5px 0}.market #project-details>article #chat-messages p{margin:4px 0!important;padding:6px 8px;background:white;border-radius:7px}.market #project-details>article #chat-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin:7px 0}.market #project-details>article #chat-form label{flex:1 1 260px;margin:0}.market #project-details>article #chat-form textarea{min-height:48px;height:54px;margin:4px 0}.market #project-details>article #chat-form button{margin:0}.market #project-details>article #chat-presence-dots{margin:6px 0!important}';
