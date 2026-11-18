@@ -365,7 +365,18 @@ export default {
     if(owner.owner_clerk_id!==user)return json({error:'Forbidden'},403);
     const b=await body(request);
     if(!b||!['open','paused','closed'].includes(b.status))return json({error:'Invalid status'},400);
+    const previous=await env.DB.prepare('SELECT status,title FROM projects WHERE id=?').bind(match[1]).first();
+    const reason=typeof b.reason==='string'?b.reason.trim():'';
+    if(['paused','closed'].includes(b.status)&&previous?.status!==b.status&&(reason.length<5||reason.length>1000))return json({error:'Please explain why you are pausing or stopping this Collabo (5–1000 characters).'},400);
     await env.DB.prepare("UPDATE projects SET status=?,updated_at=datetime('now') WHERE id=?").bind(b.status,match[1]).run();
+    if(['paused','closed'].includes(b.status)&&previous?.status!==b.status){
+     try{
+      const collaborators=await env.DB.prepare("SELECT DISTINCT applicant_clerk_id AS id FROM role_applications WHERE project_id=? AND status='approved' AND applicant_clerk_id<>?").bind(match[1],user).all();
+      for(const member of collaborators.results||[]){
+       await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),member.id,b.status==='paused'?'Collabo paused':'Collabo stopped',String(previous.title||'Your Collabo').slice(0,100)+': '+reason,'#project/'+match[1]).run();
+      }
+     }catch(e){console.error('Project status notifications failed',e)}
+    }
     return json({updated:true});
    }
    const apply=/^\/api\/projects\/([a-f0-9-]{36})\/applications$/.exec(url.pathname);
