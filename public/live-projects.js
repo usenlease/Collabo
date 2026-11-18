@@ -59,6 +59,27 @@ document.head.appendChild(collaboProgressTrackStyle);
 const embeddedChatStyle=document.createElement('style');
 embeddedChatStyle.textContent='.market #project-details>article #team-chat{margin:12px 0 0!important;padding:12px!important;background:#f7fbff;border:1px solid #a9cafa;border-radius:10px}.market #project-details>article #team-chat h3{margin:0 0 7px!important;color:#1557a0}.market #project-details>article #chat-messages{max-height:210px!important;overflow-y:auto;padding:5px 0}.market #project-details>article #chat-messages p{margin:4px 0!important;padding:6px 8px;background:white;border-radius:7px}.market #project-details>article #chat-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin:7px 0}.market #project-details>article #chat-form label{flex:1 1 260px;margin:0}.market #project-details>article #chat-form textarea{min-height:48px;height:54px;margin:4px 0}.market #project-details>article #chat-form button{margin:0}.market #project-details>article #chat-presence-dots{margin:6px 0!important}';
 document.head.appendChild(embeddedChatStyle);
+const compactProjectChatStyle=document.createElement('style');
+compactProjectChatStyle.textContent=`
+/* Recover whitespace in project details and group chat without hiding content. */
+.market #project-details>article{padding:14px 16px!important}
+.market #project-details>article>h3,.market #project-details>article>h4{margin:8px 0 5px!important}
+.market #project-details>article>p{margin:5px 0!important;line-height:1.4!important}
+.market #project-details>article #team-chat{margin:8px 0 0!important;padding:10px 12px!important}
+.market #project-details>article #team-chat h3{margin:0 0 3px!important}
+.market #project-details>article #chat-presence-count{margin:2px 0 5px!important;line-height:1.25!important}
+.market #project-details>article #chat-presence-dots{margin:3px 0!important}
+.market #project-details>article #chat-first,.market #project-details>article #chat-latest{padding:7px 10px!important;margin:2px 3px 5px 0!important;min-height:34px}
+.market #project-details>article #chat-messages{max-height:190px!important;min-height:0!important;padding:7px!important;margin:4px 0!important;gap:5px!important}
+.market #project-details>article #chat-messages p{padding:7px 10px!important;line-height:1.35!important}
+.market #project-details>article #chat-form{display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:8px!important;align-items:end!important;margin:5px 0!important}
+.market #project-details>article #chat-form label{min-width:0;margin:0!important}
+.market #project-details>article #chat-form textarea{min-height:38px!important;height:42px!important;resize:vertical;margin:2px 0 0!important;padding:7px 9px!important}
+.market #project-details>article #chat-form button{min-height:40px!important;padding:8px 12px!important}
+.market #project-details>article #chat-refresh{padding:6px 10px!important;margin:2px 0 0!important}
+@media(max-width:600px){.market #project-details>article #chat-form{grid-template-columns:1fr}.market #project-details>article #chat-form button{justify-self:start}}
+`;
+document.head.appendChild(compactProjectChatStyle);
 const leanApplicationsStyle=document.createElement('style');
 leanApplicationsStyle.textContent='.market #applications{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:8px 0 16px}.market #applications article{min-width:0;margin:0!important;padding:11px 13px!important;border-radius:10px;overflow-wrap:anywhere}.market #applications article p{margin:5px 0!important;line-height:1.35!important;font-size:14px}.market #applications article button{margin:5px 5px 0 0!important;padding:6px 11px!important}.market #applications .application-title{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}.market #applications .application-status{font-size:12px;padding:2px 7px;border-radius:20px;background:#e9f3eb}.market #project-details h3{margin:12px 0 7px!important}.market #project-details>article{margin:8px 0!important}.market .owner-controls{display:block}.market .owner-controls p{margin:5px 0!important;line-height:1.35}.market #published-pictures{margin:8px 0!important}@media(max-width:650px){.market #applications{grid-template-columns:1fr}.market #applications article{padding:10px 12px!important}}';
 document.head.appendChild(leanApplicationsStyle);
