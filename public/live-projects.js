@@ -182,10 +182,10 @@ suggestions();categoryChange();const imageHost=f.querySelector('#post-image-slot
 const pictureFiles=[null,null,null],pictureUrls=[null,null,null];
 const projectPublishIdKey='cc-collabo-draft-publish-id';
 const pictureUploadMaxBytes=5*1024*1024;
-async function normalizePicture(file){
+async function normalizePicture(file,forceJpeg=false){
  if(!file||(!file.type.startsWith('image/')&&!/\.(jpe?g|png|webp|heic|heif|avif|gif|bmp|tiff?)$/i.test(file.name||'')))throw Error('Select a picture.');
  if(file.size>25*1024*1024)throw Error('Original picture is over 25 MB. Choose a smaller photo.');
- if(['image/jpeg','image/png','image/webp'].includes(file.type)&&file.size<=pictureUploadMaxBytes)return file;
+ if(!forceJpeg&&['image/jpeg','image/png','image/webp'].includes(file.type)&&file.size<=pictureUploadMaxBytes)return file;
  let image,url;
  try{
   if(typeof createImageBitmap==='function')image=await createImageBitmap(file).catch(()=>null);
@@ -207,12 +207,22 @@ async function normalizePicture(file){
 async function uploadPictures(projectId,files,feedback){
  const selected=files.map((file,i)=>file?i:-1).filter(i=>i>=0);
  for(let n=0;n<selected.length;n++){
-  const i=selected[n],file=files[i];
+  const i=selected[n];
+  feedback.textContent='Preparing picture '+(n+1)+' of '+selected.length+'…';
+  // Normalize even restored IndexedDB blobs: iOS can restore a previewable file
+  // with an unsupported or empty MIME type.
+  const file=await normalizePicture(files[i],true);
   feedback.textContent='Uploading picture '+(n+1)+' of '+selected.length+'…';
   let lastError;
   for(let attempt=0;attempt<3;attempt++){
    try{
-    const result=await api('/projects/'+projectId+'/pictures/'+(i+1),{method:'PUT',headers:{'content-type':file.type||'image/jpeg'},body:file});
+    const token=await window.cloudCollaboGetToken?.();
+    if(!token)throw Error('Sign in to upload pictures');
+    const response=await fetch('/api/projects/'+projectId+'/pictures/'+(i+1),{
+     method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'image/jpeg'},body:file
+    });
+    const result=await response.json().catch(()=>({error:'Picture service returned an unexpected response'}));
+    if(!response.ok)throw Error(result.error||'Picture upload failed');
     if(!result.saved)throw Error('Picture upload was not confirmed');
     lastError=null;break;
    }catch(error){
