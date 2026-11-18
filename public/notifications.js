@@ -3,6 +3,20 @@
  const bell=document.getElementById('cc-notification-bell'),panel=document.getElementById('cc-notification-panel'),count=document.getElementById('cc-notification-count'),list=document.getElementById('cc-notification-list');
  if(!bell||!panel)return;
  const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ let soundEnabled=localStorage.getItem('cc-notification-sound')==='on',audioContext=null;
+ const soundToggle=document.createElement('button');soundToggle.type='button';soundToggle.style.cssText='display:block;margin:8px 0;padding:7px 10px;border:1px solid #d5c169;border-radius:7px;background:#fff8d8;color:#263322';
+ const soundLabel=()=>soundToggle.textContent='Notification sound: '+(soundEnabled?'On 🔊':'Off 🔇');
+ soundLabel();panel.querySelector('strong')?.insertAdjacentElement('afterend',soundToggle);
+ soundToggle.addEventListener('click',()=>{
+  soundEnabled=!soundEnabled;localStorage.setItem('cc-notification-sound',soundEnabled?'on':'off');
+  if(soundEnabled){try{audioContext=audioContext||new (window.AudioContext||window.webkitAudioContext)();audioContext.resume().then(playSound).catch(()=>{})}catch{}}
+  soundLabel();
+ });
+ function playSound(){
+  if(!soundEnabled||document.hidden||!audioContext||audioContext.state!=='running')return;
+  const now=audioContext.currentTime;
+  [660,880].forEach((hz,i)=>{const o=audioContext.createOscillator(),g=audioContext.createGain(),start=now+i*.17;o.frequency.value=hz;o.type='sine';g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(.08,start+.02);g.gain.exponentialRampToValueAtTime(.0001,start+.15);o.connect(g);g.connect(audioContext.destination);o.start(start);o.stop(start+.16)});
+ }
  let items=[];
  let knownUnreadIds=new Set(),initialized=false,refreshInFlight=false;
  const toast=document.createElement('div');toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');toast.style.cssText='position:fixed;right:16px;top:90px;z-index:9999;max-width:min(350px,90vw);pointer-events:none';document.body.appendChild(toast);
@@ -23,7 +37,7 @@
    const data=await request('/notifications');
    items=data.notifications||[];
    const unreadItems=items.filter(n=>!n.read_at);
-   if(initialized)unreadItems.filter(n=>!knownUnreadIds.has(n.id)).slice(0,3).forEach(showToast);
+   if(initialized){const fresh=unreadItems.filter(n=>!knownUnreadIds.has(n.id));fresh.slice(0,3).forEach(showToast);if(fresh.length)playSound();}
    knownUnreadIds=new Set(unreadItems.map(n=>n.id));initialized=true;
    count.textContent=String(data.unread||0);
    count.style.display=data.unread?'inline':'none';
