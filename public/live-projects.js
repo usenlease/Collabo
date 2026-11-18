@@ -208,7 +208,6 @@ function renderPictureSlots(){
 }
 renderPictureSlots();restoreDraftPictures();
 document.getElementById('clear-collabo-draft').onclick=async()=>{
- if(!confirm('Clear this saved draft and start a new Collabo? This will remove the form and its saved pictures from this device. Published Collabos will not be deleted.'))return;
  if(draftSaveTimer!==null){clearTimeout(draftSaveTimer);draftSaveTimer=null}
  try{localStorage.removeItem(draftKey);localStorage.removeItem(projectPublishIdKey)}catch{}
  try{await clearImageDraft()}catch{}
