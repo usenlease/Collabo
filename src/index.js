@@ -462,7 +462,12 @@ export default {
     const updated=await env.DB.prepare("UPDATE role_applications SET rate_amount=?,updated_at=datetime('now') WHERE id=? AND applicant_clerk_id=? AND status='pending'").bind(amount,a.id,user).run();
     if(!updated.meta.changes)return json({error:'Application is no longer pending'},409);
     if(amount!==Number(a.rate_amount)){
-     try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),a.owner_clerk_id,'Collaborator bid revised','A collaborator changed their proposed rate from 
+     const notice='A collaborator changed their proposed rate from USD '+Number(a.rate_amount).toFixed(2)+' to USD '+amount.toFixed(2)+'.';
+     try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),a.owner_clerk_id,'Collaborator bid revised',notice,'#project/'+decision[1]).run()}catch(e){console.error('Bid revision notification failed',e)}
+    }
+    return json({updated:true,rate_amount:amount,currency:'USD'});
+   }
+   if(decision&&request.method==='PATCH'){
     const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(decision[1]).first();
     if(!p||p.owner_clerk_id!==user)return json({error:'Only the Initiator can decide'},403);
     const b=await body(request);if(!['approved','declined'].includes(b?.status))return json({error:'Invalid decision'},400);
