@@ -20,7 +20,33 @@
  let items=[];
  let knownUnreadIds=new Set(),initialized=false,refreshInFlight=false;
  const toast=document.createElement('div');toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');toast.style.cssText='position:fixed;right:16px;top:90px;z-index:9999;max-width:min(350px,90vw);pointer-events:none';document.body.appendChild(toast);
- function showToast(n){const el=document.createElement('div');el.style.cssText='background:#fff8d8;border:2px solid #d3a700;border-radius:12px;padding:12px;margin-bottom:8px;box-shadow:0 8px 24px #0002;color:#263322;pointer-events:auto';const title=document.createElement('strong');title.textContent=n.title;const msg=document.createElement('div');msg.textContent=n.message;const link=document.createElement('button');link.type='button';link.textContent='View application';link.style.cssText='display:block;margin-top:8px;padding:6px 10px;background:#166534;color:white;border:0;border-radius:7px';link.onclick=()=>{if(/^#project\/[a-f0-9-]{36}$/.test(n.link||''))location.hash=n.link.slice(1);el.remove()};el.append(title,msg,link);toast.prepend(el);setTimeout(()=>el.remove(),9000)}
+ function openNotificationTarget(n){
+  const target=String(n.link||'');
+  const match=/^#project\/([a-f0-9-]{36})(?:\/application\/([a-f0-9-]{36}))?$/.exec(target);
+  if(!match)return;
+  const projectHash='#project/'+match[1];
+  const applicantId=match[2]||'';
+  // A click on a notification must lead to the actual action area,
+  // including when already viewing this project.
+  if(location.hash!==projectHash)location.hash=projectHash;
+  const focus=()=>{
+   const container=document.getElementById('applications');
+   if(!container)return false;
+   const card=applicantId?container.querySelector('[data-application-id="'+applicantId+'"]'):null;
+   const heading=container.previousElementSibling;
+   const element=card||container;
+   element.scrollIntoView({behavior:'smooth',block:'center'});
+   if(card){
+    const details=card.querySelector('details');if(details)details.open=true;
+    card.style.outline='3px solid #168444';card.style.outlineOffset='3px';
+   }
+   return true;
+  };
+  let tries=0;
+  const tryFocus=()=>{if(focus()||++tries>=40)return;setTimeout(tryFocus,200)};
+  setTimeout(tryFocus,120);
+ }
+ function showToast(n){const el=document.createElement('div');el.style.cssText='background:#fff8d8;border:2px solid #d3a700;border-radius:12px;padding:12px;margin-bottom:8px;box-shadow:0 8px 24px #0002;color:#263322;pointer-events:auto';const title=document.createElement('strong');title.textContent=n.title;const msg=document.createElement('div');msg.textContent=n.message;const link=document.createElement('button');link.type='button';link.textContent='Open notification';link.style.cssText='display:block;margin-top:8px;padding:6px 10px;background:#166534;color:white;border:0;border-radius:7px';link.onclick=()=>{openNotificationTarget(n);el.remove()};el.append(title,msg,link);toast.prepend(el);setTimeout(()=>el.remove(),9000)}
  async function request(path,options){
   const token=await window.cloudCollaboGetToken?.();
   if(!token)throw Error('Sign in to view notifications');
@@ -50,7 +76,7 @@
   const n=items.find(x=>x.id===button.dataset.notification);if(!n)return;
   try{await request('/notifications/'+encodeURIComponent(n.id)+'/read',{method:'POST'});}catch(e){list.textContent=e.message;return}
   panel.hidden=true;bell.setAttribute('aria-expanded','false');
-  if(/^#project\/[a-f0-9-]{36}$/.test(n.link||''))location.hash=n.link.slice(1);
+  openNotificationTarget(n);
   await refresh();
  });
  window.addEventListener('cloudcollabo-auth-changed',refresh);
