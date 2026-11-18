@@ -452,6 +452,148 @@ export default {
     return json({applications:rows.results,is_owner:owner});
    }
    const decision=/^\/api\/projects\/([a-f0-9-]{36})\/role-applications\/([a-f0-9-]{36})$/.exec(url.pathname);
+   if(decision&&request.method==='PUT'){
+    const a=await env.DB.prepare("SELECT a.id,a.status,a.applicant_clerk_id,a.rate_amount,p.owner_clerk_id,p.status AS project_status FROM role_applications a JOIN projects p ON p.id=a.project_id WHERE a.id=? AND a.project_id=?").bind(decision[2],decision[1]).first();
+    if(!a)return json({error:'Application not found'},404);
+    if(a.applicant_clerk_id!==user)return json({error:'You can edit only your own application'},403);
+    if(a.status!=='pending'||a.project_status!=='open')return json({error:'Only pending applications for open Collabos can be edited'},409);
+    const b=await body(request),amount=Number(b?.rate_amount);
+    if(b?.rate_amount===undefined||b?.rate_amount===null||b?.rate_amount===''||!Number.isFinite(amount)||amount<0||Math.abs(Math.round(amount*100)-amount*100)>0.00001)return json({error:'Enter a valid USD bid with at most two decimal places'},400);
+    const updated=await env.DB.prepare("UPDATE role_applications SET rate_amount=?,updated_at=datetime('now') WHERE id=? AND applicant_clerk_id=? AND status='pending'").bind(amount,a.id,user).run();
+    if(!updated.meta.changes)return json({error:'Application is no longer pending'},409);
+    if(amount!==Number(a.rate_amount)){
+     try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),a.owner_clerk_id,'Collaborator bid revised','A collaborator changed their proposed rate from 
+    const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(decision[1]).first();
+    if(!p||p.owner_clerk_id!==user)return json({error:'Only the Initiator can decide'},403);
+    const b=await body(request);if(!['approved','declined'].includes(b?.status))return json({error:'Invalid decision'},400);
+    const a=await env.DB.prepare("SELECT a.id,a.status,a.need_id,a.applicant_clerk_id,a.offered_quantity,n.quantity,n.item_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.id=? AND a.project_id=?").bind(decision[2],decision[1]).first();
+    if(!a||a.status!=='pending')return json({error:'Application is not pending'},409);
+    if(b.status==='approved'){
+     const filled=await env.DB.prepare("SELECT COALESCE(SUM(offered_quantity),0) AS total FROM role_applications WHERE need_id=? AND status='approved'").bind(a.need_id).first();
+     if(filled.total+a.offered_quantity>a.quantity)return json({error:'Not enough remaining positions or items'},409);
+    }
+    const result=await env.DB.prepare("UPDATE role_applications SET status=?,updated_at=datetime('now') WHERE id=? AND status='pending'").bind(b.status,a.id).run();
+    if(!result.meta.changes)return json({error:'Application already decided'},409);
+    try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),a.applicant_clerk_id,b.status==='approved'?'Application approved':'Application rejected','Your application for '+a.item_name+(b.status==='approved'?' has been approved. You can now join the Collabo Group Chat.':' was not approved.'),'#project/'+decision[1]).run();}catch(e){console.error('Decision notification failed',e)}
+    return json({updated:true,status:b.status});
+   }
+   const presence=/^\/api\/projects\/([a-f0-9-]{36})\/team-presence$/.exec(url.pathname);
+   if(presence&&(request.method==='GET'||request.method==='POST')){
+    const project=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(presence[1]).first();
+    if(!project)return json({error:'Project not found'},404);
+    const owner=project.owner_clerk_id===user;
+    if(!owner){
+     const member=await env.DB.prepare("SELECT 1 FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(presence[1],user).first();
+     if(!member)return json({error:'Only approved project members may view chat presence'},403);
+    }
+    const exists=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_chat_presence'").first();
+    if(!exists)return json({error:'Chat presence requires database setup',code:'CHAT_PRESENCE_SETUP_REQUIRED'},503);
+    if(request.method==='POST'){
+     const payload=await body(request);
+     if(payload?.active===false)await env.DB.prepare('DELETE FROM project_chat_presence WHERE project_id=? AND user_id=?').bind(presence[1],user).run();
+     else await env.DB.prepare("INSERT INTO project_chat_presence(project_id,user_id,last_seen_at) VALUES(?,?,unixepoch()) ON CONFLICT(project_id,user_id) DO UPDATE SET last_seen_at=unixepoch()").bind(presence[1],user).run();
+    }
+    const [active,approved]=await Promise.all([
+     env.DB.prepare('SELECT user_id FROM project_chat_presence WHERE project_id=? AND last_seen_at>=unixepoch()-40').bind(presence[1]).all(),
+     env.DB.prepare("SELECT a.applicant_clerk_id,GROUP_CONCAT(DISTINCT n.item_name) AS roles FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=? AND a.status='approved' GROUP BY a.applicant_clerk_id").bind(presence[1]).all()
+    ]);
+    const members=[{id:project.owner_clerk_id,role:'initiator'},...approved.results.filter(x=>x.applicant_clerk_id!==project.owner_clerk_id).map(x=>({id:x.applicant_clerk_id,role:'collaborator',label:x.roles||'Role not specified'}))];
+    const present=new Set(active.results.map(x=>x.user_id));
+    return json({joined:members.length,collaborators_joined:members.length-1,active:members.filter(x=>present.has(x.id)).map(x=>({role:x.role,label:x.role==='initiator'?'Initiator':x.label,id:x.id})),you:user});
+   }
+   const chat=/^\/api\/projects\/([a-f0-9-]{36})\/team-messages$/.exec(url.pathname);
+   if(chat&&(request.method==='GET'||request.method==='POST')){
+    const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(chat[1]).first();
+    if(!p)return json({error:'Project not found'},404);
+    if(p.owner_clerk_id!==user){
+     const roleTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='role_applications'").first();
+     if(!roleTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
+     const member=await env.DB.prepare("SELECT id FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(chat[1],user).first();
+     if(!member)return json({error:'Only approved collaborators can enter team chat'},403);
+    }
+    const chatTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_team_messages'").first();
+    if(!chatTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
+    if(request.method==='GET'){
+     const first=url.searchParams.get('first')==='1';
+     const rows=await env.DB.prepare(`SELECT m.id,m.sender_clerk_id,m.body,m.created_at,CASE WHEN m.sender_clerk_id=? THEN 'Initiator' ELSE COALESCE((SELECT GROUP_CONCAT(role_name, ', ') FROM (SELECT DISTINCT n.item_name AS role_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=m.project_id AND a.applicant_clerk_id=m.sender_clerk_id AND a.status='approved' ORDER BY n.item_name)), 'Collaborator') END AS sender_role FROM project_team_messages m WHERE m.project_id=? ORDER BY created_at ${first?'ASC':'DESC'},id ${first?'ASC':'DESC'} LIMIT 100`).bind(p.owner_clerk_id,chat[1]).all();
+     return json({messages:first?rows.results:rows.results.reverse(),first_page:first});
+    }
+    const b=await body(request);if(typeof b?.message!=='string'||!b.message.trim()||b.message.length>2000)return json({error:'Message must be 1–2000 characters'},400);
+    await env.DB.prepare('INSERT INTO project_team_messages(id,project_id,sender_clerk_id,body) VALUES(?,?,?,?)').bind(crypto.randomUUID(),chat[1],user,b.message.trim()).run();
+    return json({sent:true},201);
+   }
+   return json({error:'Not found'},404);
+  }catch(e){console.error('API failure',e);return json({error:'Server error'},500)}
+ }
+};
++Number(a.rate_amount).toFixed(2)+' to 
+    const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(decision[1]).first();
+    if(!p||p.owner_clerk_id!==user)return json({error:'Only the Initiator can decide'},403);
+    const b=await body(request);if(!['approved','declined'].includes(b?.status))return json({error:'Invalid decision'},400);
+    const a=await env.DB.prepare("SELECT a.id,a.status,a.need_id,a.applicant_clerk_id,a.offered_quantity,n.quantity,n.item_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.id=? AND a.project_id=?").bind(decision[2],decision[1]).first();
+    if(!a||a.status!=='pending')return json({error:'Application is not pending'},409);
+    if(b.status==='approved'){
+     const filled=await env.DB.prepare("SELECT COALESCE(SUM(offered_quantity),0) AS total FROM role_applications WHERE need_id=? AND status='approved'").bind(a.need_id).first();
+     if(filled.total+a.offered_quantity>a.quantity)return json({error:'Not enough remaining positions or items'},409);
+    }
+    const result=await env.DB.prepare("UPDATE role_applications SET status=?,updated_at=datetime('now') WHERE id=? AND status='pending'").bind(b.status,a.id).run();
+    if(!result.meta.changes)return json({error:'Application already decided'},409);
+    try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),a.applicant_clerk_id,b.status==='approved'?'Application approved':'Application rejected','Your application for '+a.item_name+(b.status==='approved'?' has been approved. You can now join the Collabo Group Chat.':' was not approved.'),'#project/'+decision[1]).run();}catch(e){console.error('Decision notification failed',e)}
+    return json({updated:true,status:b.status});
+   }
+   const presence=/^\/api\/projects\/([a-f0-9-]{36})\/team-presence$/.exec(url.pathname);
+   if(presence&&(request.method==='GET'||request.method==='POST')){
+    const project=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(presence[1]).first();
+    if(!project)return json({error:'Project not found'},404);
+    const owner=project.owner_clerk_id===user;
+    if(!owner){
+     const member=await env.DB.prepare("SELECT 1 FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(presence[1],user).first();
+     if(!member)return json({error:'Only approved project members may view chat presence'},403);
+    }
+    const exists=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_chat_presence'").first();
+    if(!exists)return json({error:'Chat presence requires database setup',code:'CHAT_PRESENCE_SETUP_REQUIRED'},503);
+    if(request.method==='POST'){
+     const payload=await body(request);
+     if(payload?.active===false)await env.DB.prepare('DELETE FROM project_chat_presence WHERE project_id=? AND user_id=?').bind(presence[1],user).run();
+     else await env.DB.prepare("INSERT INTO project_chat_presence(project_id,user_id,last_seen_at) VALUES(?,?,unixepoch()) ON CONFLICT(project_id,user_id) DO UPDATE SET last_seen_at=unixepoch()").bind(presence[1],user).run();
+    }
+    const [active,approved]=await Promise.all([
+     env.DB.prepare('SELECT user_id FROM project_chat_presence WHERE project_id=? AND last_seen_at>=unixepoch()-40').bind(presence[1]).all(),
+     env.DB.prepare("SELECT a.applicant_clerk_id,GROUP_CONCAT(DISTINCT n.item_name) AS roles FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=? AND a.status='approved' GROUP BY a.applicant_clerk_id").bind(presence[1]).all()
+    ]);
+    const members=[{id:project.owner_clerk_id,role:'initiator'},...approved.results.filter(x=>x.applicant_clerk_id!==project.owner_clerk_id).map(x=>({id:x.applicant_clerk_id,role:'collaborator',label:x.roles||'Role not specified'}))];
+    const present=new Set(active.results.map(x=>x.user_id));
+    return json({joined:members.length,collaborators_joined:members.length-1,active:members.filter(x=>present.has(x.id)).map(x=>({role:x.role,label:x.role==='initiator'?'Initiator':x.label,id:x.id})),you:user});
+   }
+   const chat=/^\/api\/projects\/([a-f0-9-]{36})\/team-messages$/.exec(url.pathname);
+   if(chat&&(request.method==='GET'||request.method==='POST')){
+    const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(chat[1]).first();
+    if(!p)return json({error:'Project not found'},404);
+    if(p.owner_clerk_id!==user){
+     const roleTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='role_applications'").first();
+     if(!roleTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
+     const member=await env.DB.prepare("SELECT id FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(chat[1],user).first();
+     if(!member)return json({error:'Only approved collaborators can enter team chat'},403);
+    }
+    const chatTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_team_messages'").first();
+    if(!chatTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
+    if(request.method==='GET'){
+     const first=url.searchParams.get('first')==='1';
+     const rows=await env.DB.prepare(`SELECT m.id,m.sender_clerk_id,m.body,m.created_at,CASE WHEN m.sender_clerk_id=? THEN 'Initiator' ELSE COALESCE((SELECT GROUP_CONCAT(role_name, ', ') FROM (SELECT DISTINCT n.item_name AS role_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=m.project_id AND a.applicant_clerk_id=m.sender_clerk_id AND a.status='approved' ORDER BY n.item_name)), 'Collaborator') END AS sender_role FROM project_team_messages m WHERE m.project_id=? ORDER BY created_at ${first?'ASC':'DESC'},id ${first?'ASC':'DESC'} LIMIT 100`).bind(p.owner_clerk_id,chat[1]).all();
+     return json({messages:first?rows.results:rows.results.reverse(),first_page:first});
+    }
+    const b=await body(request);if(typeof b?.message!=='string'||!b.message.trim()||b.message.length>2000)return json({error:'Message must be 1–2000 characters'},400);
+    await env.DB.prepare('INSERT INTO project_team_messages(id,project_id,sender_clerk_id,body) VALUES(?,?,?,?)').bind(crypto.randomUUID(),chat[1],user,b.message.trim()).run();
+    return json({sent:true},201);
+   }
+   return json({error:'Not found'},404);
+  }catch(e){console.error('API failure',e);return json({error:'Server error'},500)}
+ }
+};
++amount.toFixed(2)+'.','#project/'+decision[1]).run()}catch(e){console.error('Bid revision notification failed',e)}
+    }
+    return json({updated:true,rate_amount:amount,currency:'USD'});
+   }
    if(decision&&request.method==='PATCH'){
     const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(decision[1]).first();
     if(!p||p.owner_clerk_id!==user)return json({error:'Only the Initiator can decide'},403);
