@@ -100,6 +100,26 @@ export default {
   const user=await identity(request,env);
   if(!user) return json({error:'Sign in required'},401);
   try {
+   // Explicit allowlist, checked server-side for every administrative request.
+   if(url.pathname.startsWith('/api/admin/')){
+    const allowed=String(env.ADMIN_CLERK_USER_IDS||'').split(',').map(v=>v.trim()).filter(Boolean);
+    if(!allowed.includes(user))return json({error:'Administrator access is not configured for this account.'},403);
+    if(url.pathname==='/api/admin/overview'&&request.method==='GET'){
+     const tables=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+     const available=new Set(tables.results.map(x=>x.name));
+     const [projects,applications]=await Promise.all([
+      env.DB.prepare("SELECT id,owner_clerk_id,title,category,location,status,created_at FROM projects ORDER BY created_at DESC LIMIT 500").all(),
+      available.has('role_applications')?env.DB.prepare("SELECT project_id,applicant_clerk_id,status FROM role_applications").all():Promise.resolve({results:[]})
+     ]);
+     const all=projects.results,apps=applications.results;
+     const joined=new Set([...all.map(x=>x.owner_clerk_id),...apps.map(x=>x.applicant_clerk_id)]);
+     const approved=new Set(apps.filter(x=>x.status==='approved').map(x=>x.project_id));
+     const count={total:all.length,completed:all.filter(x=>x.status==='closed').length,paused:all.filter(x=>x.status==='paused').length,ongoing:all.filter(x=>approved.has(x.id)&&x.status==='open').length,no_collaborators:all.filter(x=>!approved.has(x.id)).length};
+     const locations={};for(const p of all){const place=(p.location||'Unspecified').split(',').map(x=>x.trim()).filter(Boolean).pop()||'Unspecified';locations[place]=(locations[place]||0)+1}
+     return json({member_counts:{known_unique_members:joined.size,initiators:new Set(all.map(x=>x.owner_clerk_id)).size,applicants:new Set(apps.map(x=>x.applicant_clerk_id)).size,note:'Counts include participants recorded in projects and applications; not all Clerk registrations.'},members:[...joined].slice(0,500).map(id=>({id,initiator:all.some(p=>p.owner_clerk_id===id),collaborator:apps.some(a=>a.applicant_clerk_id===id)})),collabos:all.map(p=>({...p,approved_collaborators:apps.filter(a=>a.project_id===p.id&&a.status==='approved').length,applications:apps.filter(a=>a.project_id===p.id).length})),count,locations:Object.entries(locations).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count})),finances:{collected:null,transacted:null,note:'No verified platform payment ledger is connected. Project estimates are not revenue.'},email:{enabled:false,note:'Bulk email requires a configured provider, consent controls, and delivery logs.'}});
+    }
+    return json({error:'Admin endpoint unavailable'},404);
+   }
 
    // Store payout preferences only; never accept raw banking credentials or issue transfers.
    if(url.pathname==='/api/me/payout-preference'){
