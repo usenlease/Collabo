@@ -20,7 +20,21 @@
  let items=[];
  let knownUnreadIds=new Set(),initialized=false,refreshInFlight=false;
  const toast=document.createElement('div');toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');toast.style.cssText='position:fixed;right:16px;top:90px;z-index:9999;max-width:min(350px,90vw);pointer-events:none';document.body.appendChild(toast);
- function showToast(n){const el=document.createElement('div');el.style.cssText='background:#fff8d8;border:2px solid #d3a700;border-radius:12px;padding:12px;margin-bottom:8px;box-shadow:0 8px 24px #0002;color:#263322;pointer-events:auto';const title=document.createElement('strong');title.textContent=n.title;const msg=document.createElement('div');msg.textContent=n.message;const link=document.createElement('button');link.type='button';link.textContent='View application';link.style.cssText='display:block;margin-top:8px;padding:6px 10px;background:#166534;color:white;border:0;border-radius:7px';link.onclick=()=>{if(/^#project\/[a-f0-9-]{36}$/.test(n.link||''))location.hash=n.link.slice(1);el.remove()};el.append(title,msg,link);toast.prepend(el);setTimeout(()=>el.remove(),9000)}
+ function navigateToNotification(n){
+  const target=String(n.link||'');
+  const match=/^#project\/([a-f0-9-]{36})(\/chat)?$/.exec(target);
+  if(!match)return;
+  const hash='#project/'+match[1];
+  if(location.hash!==hash)location.hash=hash;
+  let tries=0;
+  const focus=()=>{
+   const el=match[2]?(document.getElementById('collabo-team-chat')||document.querySelector('[data-team-chat]')||document.querySelector('.collabo-group-chat')):document.getElementById('applications');
+   if(el){el.scrollIntoView({behavior:'smooth',block:'center'});return}
+   if(++tries<40)setTimeout(focus,200);
+  };
+  setTimeout(focus,120);
+ }
+ function showToast(n){const el=document.createElement('div');el.style.cssText='background:#fff8d8;border:2px solid #d3a700;border-radius:12px;padding:12px;margin-bottom:8px;box-shadow:0 8px 24px #0002;color:#263322;pointer-events:auto';const title=document.createElement('strong');title.textContent=n.title;const msg=document.createElement('div');msg.textContent=n.message;const link=document.createElement('button');link.type='button';link.textContent='View application';link.style.cssText='display:block;margin-top:8px;padding:6px 10px;background:#166534;color:white;border:0;border-radius:7px';link.onclick=()=>{navigateToNotification(n);el.remove()};el.append(title,msg,link);toast.prepend(el);setTimeout(()=>el.remove(),9000)}
  async function request(path,options){
   const token=await window.cloudCollaboGetToken?.();
   if(!token)throw Error('Sign in to view notifications');
@@ -50,7 +64,7 @@
   const n=items.find(x=>x.id===button.dataset.notification);if(!n)return;
   try{await request('/notifications/'+encodeURIComponent(n.id)+'/read',{method:'POST'});}catch(e){list.textContent=e.message;return}
   panel.hidden=true;bell.setAttribute('aria-expanded','false');
-  if(/^#project\/[a-f0-9-]{36}$/.test(n.link||''))location.hash=n.link.slice(1);
+  navigateToNotification(n);
   await refresh();
  });
  window.addEventListener('cloudcollabo-auth-changed',refresh);
