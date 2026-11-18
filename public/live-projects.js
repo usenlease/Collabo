@@ -476,6 +476,39 @@ document.getElementById('chat-refresh').onclick=()=>refresh(false);document.getE
 }catch(err){document.getElementById('project-details').textContent=err.message}return}
 location.hash='home'}
 document.addEventListener('click',e=>{const routeButton=e.target.closest('[data-route]');if(routeButton){e.preventDefault();if(location.hash==='#'+routeButton.dataset.route)route();else location.hash=routeButton.dataset.route;return}const p=e.target.closest('[data-project]');if(p){e.preventDefault();location.hash='project/'+p.dataset.project;return}if(e.target.closest('#initiate')){e.preventDefault();location.hash='post'}if(e.target.closest('#explore')){e.preventDefault();location.hash='explore'}});
+// Bottom-of-screen navigation for long pages, including project details and application forms.
+const bottomBack=document.createElement('div');
+bottomBack.id='cc-bottom-back';
+bottomBack.style.cssText='max-width:1100px;margin:12px auto 24px;padding:0 18px;text-align:left';
+bottomBack.innerHTML='<button type="button" id="cc-bottom-back-button" style="background:#12643e;color:white;border:0;border-radius:9px;padding:12px 22px;font-weight:700;cursor:pointer;min-height:44px">← Back</button>';
+main.insertAdjacentElement('afterend',bottomBack);
+const internalPageHistory=[];
+let previousInternalPage=location.hash||'#home';
+function syncBottomBack(){
+ const current=location.hash||'#home';
+ bottomBack.hidden=current==='#home';
+}
+function trackInternalNavigation(){
+ const current=location.hash||'#home';
+ if(current!==previousInternalPage){
+  internalPageHistory.push(previousInternalPage);
+  if(internalPageHistory.length>30)internalPageHistory.shift();
+  previousInternalPage=current;
+ }
+ syncBottomBack();
+}
+bottomBack.querySelector('button').addEventListener('click',()=>{
+ const current=location.hash||'#home';
+ let target=internalPageHistory.pop();
+ while(target===current&&internalPageHistory.length)target=internalPageHistory.pop();
+ if(!target||target===current)target=current.startsWith('#project/')?'#explore':'#home';
+ previousInternalPage=target;
+ location.hash=target;
+ if(location.hash===target)route();
+ window.scrollTo({top:0,behavior:'instant'});
+});
+window.addEventListener('hashchange',trackInternalNavigation);
+syncBottomBack();
 window.addEventListener('hashchange',route);
 // Authentication updates must not destroy a guest's in-progress form or browsing screen.
 let lastAuthIdentity=window.Clerk?.user?.id||null;
