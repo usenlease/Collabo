@@ -398,7 +398,17 @@ const apps=appData.applications;if(p.is_owner){const host=document.getElementByI
    window.scrollTo(0,currentScroll);
   }else alert(err.message);
  }
-})}else document.getElementById('my-applications').innerHTML=apps.map(a=>'<div class="my-role-status" data-status="'+esc(a.status)+'"><strong>'+esc(a.item_name)+'</strong><span class="my-role-badge">'+esc(a.status==='declined'?'Declined':a.status==='approved'?'Approved':a.status==='pending'?'Pending':a.status)+'</span></div>').join('')||'<p>No applications yet.</p>';
+})}else {
+ const host=document.getElementById('my-applications');
+ host.innerHTML=apps.map(a=>'<div class="my-role-status" data-status="'+esc(a.status)+'"><strong>'+esc(a.item_name)+'</strong> <span class="my-role-badge">'+esc(a.status==='declined'?'Declined':a.status==='approved'?'Approved':a.status==='pending'?'Pending':a.status)+'</span> <span>Bid: $'+Number(a.rate_amount).toFixed(2)+' / '+esc(a.rate_period)+'</span>'+(a.status==='pending'?'<form class="edit-bid-form" data-application="'+esc(a.id)+'"><label>Revise your bid ($ USD) <input name="rate_amount" type="number" min="0" step="0.01" required value="'+Number(a.rate_amount).toFixed(2)+'"></label><button type="submit">Save revised bid</button><small role="status"></small></form>':'')+'</div>').join('')||'<p>No applications yet.</p>';
+ host.querySelectorAll('.edit-bid-form').forEach(form=>form.addEventListener('submit',async e=>{
+  e.preventDefault();const button=form.querySelector('button'),status=form.querySelector('[role="status"]');button.disabled=true;status.textContent='Saving…';
+  try{
+   await api('/projects/'+match[1]+'/role-applications/'+form.dataset.application,{method:'PUT',body:JSON.stringify({rate_amount:Number(form.elements.rate_amount.value)})});
+   const currentScroll=window.scrollY;activePage='';await route();window.scrollTo(0,currentScroll);
+  }catch(err){status.textContent=err.message;button.disabled=false}
+ }));
+}
 if(p.is_owner){
  const controls=document.createElement('section');controls.className='owner-controls';controls.innerHTML='<h3>Manage your Collabo</h3><p id="owner-manage-feedback" role="status"></p><button id="owner-edit" type="button">Edit project / Save changes</button> <button id="owner-repost" type="button">Repost project</button> <button id="owner-pause" type="button">'+(p.status==='paused'?'Resume project':'Pause project')+'</button> <button id="owner-delete" type="button" style="color:#a21b1b">Delete project</button><div id="owner-edit-area" hidden></div>';
  root.prepend(controls);
