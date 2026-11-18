@@ -40,4 +40,6 @@ async function load(){
 }
 window.addEventListener('cloudcollabo-auth-changed',load);
 let attempts=0;const wait=setInterval(()=>{load();if(window.Clerk?.loaded||++attempts>60)clearInterval(wait)},500);
+// Authentication may finish after the initial poll; the shared auth script
+// dispatches cloudcollabo-auth-changed once Clerk is initialized.
 </script></body></html>
