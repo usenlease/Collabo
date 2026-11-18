@@ -29,7 +29,7 @@
   window.cloudCollaboGetToken = async () => clerk?.session ? clerk.session.getToken() : null;
   window.cloudCollaboSignIn = async () => {
     if (!clerk) {
-      if (loading) { pending = true; notice('Connecting to secure sign-in…'); }
+      if (loading) { pending = true; }
       else notice('Sign-in is unavailable. Please check the error above or refresh after Clerk DNS verification.');
       return;
     }
@@ -39,7 +39,7 @@
     } catch (error) { failure('opening window', error); }
   };
   window.cloudCollaboSignUp = async () => {
-    if (!clerk) { if (loading) { pending = true; notice('Connecting to secure registration…'); } else notice('Registration is temporarily unavailable. Please try again.'); return; }
+    if (!clerk) { if (loading) { pending = true; } else notice('Registration is temporarily unavailable. Please try again.'); return; }
     try { if (!clerk.user) await clerk.openSignUp({ afterSignUpUrl: window.location.origin + '/', afterSignInUrl: window.location.origin + '/' }); }
     catch (error) { failure('opening registration', error); }
   };
@@ -151,7 +151,7 @@
     initialized=false;
     clerk=null;
     document.getElementById('clerk-auth-retry')?.remove();
-    notice('Connecting to secure sign-in…');
+    // Keep the homepage clear during normal authentication loading.
     // Do not fall back to test credentials on production.
     loadScript('https://' + frontend + '/npm/@clerk/ui@1/dist/ui.browser.js','Clerk UI bundle',()=>{
       loadScript('https://' + frontend + '/npm/@clerk/clerk-js@6/dist/clerk.browser.js','Clerk browser SDK',initialize);
