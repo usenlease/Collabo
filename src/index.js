@@ -439,7 +439,7 @@ export default {
     if(!Number.isInteger(qty)||qty<1||qty>n.quantity||!Number.isFinite(amount)||amount<0||!['hour','day','month','project','item'].includes(b.rate_period)||b.currency!=='USD'||!clean(b.experience,2000))return json({error:'Enter valid experience, quantity, currency and rate'},400);
     try{await env.DB.prepare('INSERT INTO role_applications(id,project_id,need_id,applicant_clerk_id,experience,offered_quantity,rate_amount,currency,rate_period,message) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(),rolesRoute[1],n.id,user,clean(b.experience,2000),qty,amount,b.currency,b.rate_period,clean(b.message,2000)).run();}
     catch(e){console.error('Role application insert failed',e);return json({error:'Your application could not be saved. Your entered information is preserved; please try again or contact support.',code:'ROLE_APPLICATION_SAVE_FAILED'},503)}
-    try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),p.owner_clerk_id,'New collaborator application','A collaborator has applied to join your Collabo.','#project/'+rolesRoute[1]).run();}catch(e){console.error('Application notification failed',e)}
+    try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),p.owner_clerk_id,'New collaborator application',clean(n.item_name,120)+' has applied to join your Collabo.','#project/'+rolesRoute[1]).run();}catch(e){console.error('Application notification failed',e)}
     return json({submitted:true},201);
    }
    if(rolesRoute&&request.method==='GET'){
