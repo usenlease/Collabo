@@ -365,7 +365,18 @@ export default {
     if(owner.owner_clerk_id!==user)return json({error:'Forbidden'},403);
     const b=await body(request);
     if(!b||!['open','paused','closed'].includes(b.status))return json({error:'Invalid status'},400);
+    const reason=clean(b.reason,1000);
+    if(['paused','closed'].includes(b.status)&&reason.length<10)return json({error:'Please explain why you are pausing or stopping this Collabo (at least 10 characters).'},400);
     await env.DB.prepare("UPDATE projects SET status=?,updated_at=datetime('now') WHERE id=?").bind(b.status,match[1]).run();
+    if(['paused','closed'].includes(b.status)){
+     try{
+      const members=await env.DB.prepare("SELECT DISTINCT applicant_clerk_id AS id FROM role_applications WHERE project_id=? AND status='approved'").bind(match[1]).all();
+      const project=await env.DB.prepare("SELECT title FROM projects WHERE id=?").bind(match[1]).first();
+      for(const member of members.results||[]){
+       await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),member.id,b.status==='paused'?'Collabo paused':'Collabo stopped',String(project?.title||'Your Collabo').slice(0,100)+' — Reason: '+reason,'#project/'+match[1]).run();
+      }
+     }catch(e){console.error('Pause notifications failed',e)}
+    }
     return json({updated:true});
    }
    const apply=/^\/api\/projects\/([a-f0-9-]{36})\/applications$/.exec(url.pathname);
