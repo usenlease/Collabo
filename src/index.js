@@ -101,6 +101,23 @@ export default {
   if(!user) return json({error:'Sign in required'},401);
   try {
 
+   // Store payout preferences only; never accept raw banking credentials or issue transfers.
+   if(url.pathname==='/api/me/payout-preference'){
+    const exists=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='collabo_payout_preferences'").first();
+    if(!exists)return json({error:'Payment setup is being configured. Apply the payout-preferences migration.'},503);
+    if(request.method==='GET'){
+     const pref=await env.DB.prepare('SELECT country,method,verification_status,updated_at FROM collabo_payout_preferences WHERE clerk_user_id=?').bind(user).first();
+     return json({country:pref?.country||'US',method:pref?.method||null,verification_status:pref?.verification_status||'not_started',updated_at:pref?.updated_at||null,provider:'Nium (pending integration)',bank_details_collected:false});
+    }
+    if(request.method==='PUT'){
+     const data=await body(request),country=clean(data?.country,2).toUpperCase(),method=clean(data?.method,20);
+     if(country!=='US'||!['direct_deposit','check'].includes(method))return json({error:'Select United States and bank direct deposit or check'},400);
+     await env.DB.prepare("INSERT INTO collabo_payout_preferences(clerk_user_id,country,method,verification_status,updated_at) VALUES(?,?,?,'not_started',datetime('now')) ON CONFLICT(clerk_user_id) DO UPDATE SET country=excluded.country,method=excluded.method,verification_status='not_started',updated_at=datetime('now')").bind(user,country,method).run();
+     return json({saved:true,verification_status:'not_started',message:'Preference saved. No bank account or mailing address has been collected. Verification and actual payout setup will be enabled after a provider is connected.'});
+    }
+    return json({error:'Method not allowed'},405);
+   }
+
    // Nium-ready payment plan: read-only. Never send funds or infer settlement from ledger entries.
    const payoutPlan=/^\/api\/projects\/([a-f0-9-]{36})\/payout-plan$/.exec(url.pathname);
    if(payoutPlan&&request.method==='GET'){
