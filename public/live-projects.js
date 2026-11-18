@@ -8,6 +8,37 @@ document.head.appendChild(theme);
 const ownerCompactStyle=document.createElement('style');
 ownerCompactStyle.textContent='.market .owner-controls{padding:12px 14px!important;margin:8px 0!important}.market .owner-controls h3{margin:0 0 8px!important}.market .owner-controls button{margin:4px 5px 4px 0!important}.market #published-pictures{padding:10px 14px!important;margin:8px 0!important}.market #published-pictures h3{margin:2px 0 8px!important}.market #published-pictures label{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:5px 0!important}.market #published-pictures select{max-width:150px}.market #published-pictures input[type=file]{max-width:300px}.market #published-pictures button{margin:4px 0!important}';
 document.head.appendChild(ownerCompactStyle);
+// Compact project details and finance layout: reduce whitespace without hiding actions or data.
+const spaceSavingStyle=document.createElement('style');
+spaceSavingStyle.textContent=`
+.market #project-details>h2{margin:8px 0!important}
+.market #project-details>.owner-controls{padding:8px 10px!important;margin:5px 0!important}
+.market #project-details>.owner-controls h3{margin:0 0 3px!important}
+.market #project-details>.owner-controls button{padding:7px 9px!important;margin:2px 3px 2px 0!important}
+.market #project-details>#published-pictures{padding:7px 10px!important;margin:5px 0!important}
+.market #project-details>#published-pictures h3{margin:0 0 5px!important}
+.market #project-details>#published-pictures .image-preview{display:flex!important;gap:5px!important;flex-wrap:wrap!important;margin:3px 0!important}
+.market #project-details>#published-pictures .image-preview img{width:105px!important;height:80px!important;object-fit:cover!important;margin:0!important}
+.market #project-details>#published-pictures label{margin:3px 0!important;gap:6px!important}
+.market #project-details>#published-pictures button{padding:7px 9px!important}
+.market #project-details>article{padding:10px 12px!important;margin:7px 0!important}
+#projection-workspace .projection-panel{padding:10px 12px!important;margin:8px 0!important;border-radius:10px!important;box-shadow:none!important}
+#projection-workspace .projection-panel h3{margin:0 0 7px!important;font-size:1.04rem!important}
+#projection-workspace .projection-panel p{margin:5px 0!important;line-height:1.35!important}
+#projection-workspace .projection-summary{padding:6px 8px!important}
+#projection-workspace .projection-summary h2{margin:3px 0!important}
+#projection-workspace .projection-metrics{gap:5px!important;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))!important}
+#projection-workspace .projection-metrics>div{padding:7px 9px!important;border-radius:7px!important}
+#projection-workspace .projection-metrics strong{font-size:16px!important;margin-top:2px!important}
+#projection-workspace .projection-panel th,#projection-workspace .projection-panel td{padding:5px 7px!important;font-size:13px!important}
+#projection-workspace .projection-panel table:has(tbody:empty){min-width:0!important}
+#projection-workspace .projection-panel table:has(tbody:empty) thead{display:none!important}
+#projection-workspace .projection-panel form{gap:5px!important}
+#projection-workspace .projection-panel form label{margin:5px 0!important}
+#projection-workspace .projection-panel input,#projection-workspace .projection-panel select,#projection-workspace .projection-panel button{padding:7px 9px!important}
+@media(max-width:650px){#projection-workspace .projection-metrics{grid-template-columns:repeat(2,minmax(0,1fr))!important}.market #project-details>#published-pictures .image-preview img{width:88px!important;height:68px!important}}
+`;
+document.head.appendChild(spaceSavingStyle);
 const embeddedChatStyle=document.createElement('style');
 embeddedChatStyle.textContent='.market #project-details>article #team-chat{margin:12px 0 0!important;padding:12px!important;background:#f7fbff;border:1px solid #a9cafa;border-radius:10px}.market #project-details>article #team-chat h3{margin:0 0 7px!important;color:#1557a0}.market #project-details>article #chat-messages{max-height:210px!important;overflow-y:auto;padding:5px 0}.market #project-details>article #chat-messages p{margin:4px 0!important;padding:6px 8px;background:white;border-radius:7px}.market #project-details>article #chat-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin:7px 0}.market #project-details>article #chat-form label{flex:1 1 260px;margin:0}.market #project-details>article #chat-form textarea{min-height:48px;height:54px;margin:4px 0}.market #project-details>article #chat-form button{margin:0}.market #project-details>article #chat-presence-dots{margin:6px 0!important}';
 document.head.appendChild(embeddedChatStyle);
