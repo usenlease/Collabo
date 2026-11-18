@@ -103,7 +103,25 @@ export default {
    // Explicit allowlist, checked server-side for every administrative request.
    if(url.pathname.startsWith('/api/admin/')){
     const allowed=String(env.ADMIN_CLERK_USER_IDS||'').split(',').map(v=>v.trim()).filter(Boolean);
-    if(!allowed.includes(user))return json({error:'Administrator access is not configured for this account.'},403);
+    let authorized=allowed.includes(user);
+    // Optional email allowlist: resolve the authenticated Clerk user on the server.
+    // Never trust an email submitted by the browser or an unverified JWT field.
+    if(!authorized && env.CLERK_SECRET_KEY){
+     const emails=String(env.ADMIN_EMAILS||'').split(',').map(v=>v.trim().toLowerCase()).filter(Boolean);
+     if(emails.length && (env.CLERK_ISSUER||productionIssuer)===productionIssuer){
+      try{
+       const response=await fetch('https://api.clerk.com/v1/users/'+encodeURIComponent(user),{
+        headers:{Authorization:'Bearer '+env.CLERK_SECRET_KEY}
+       });
+       if(response.ok){
+        const clerkUser=await response.json();
+        const verified=(clerkUser.email_addresses||[]).filter(e=>e.verification?.status==='verified').map(e=>String(e.email_address||'').trim().toLowerCase());
+        authorized=verified.some(email=>emails.includes(email));
+       }
+      }catch(e){console.error('Admin Clerk email verification failed',e)}
+     }
+    }
+    if(!authorized)return json({error:'Administrator access is not configured for this account.'},403);
     if(url.pathname==='/api/admin/overview'&&request.method==='GET'){
      const tables=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
      const available=new Set(tables.results.map(x=>x.name));
