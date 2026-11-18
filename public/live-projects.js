@@ -90,6 +90,7 @@ async function showProjection(projectId){
   section('3. Project milestones','<div>'+milestones.map(x=>'<article><strong>'+esc(x.title)+'</strong> · '+esc(x.stage)+'<p>'+esc(x.notes||'')+'</p></article>').join('')+(milestones.length?'':'<p>No milestones recorded yet.</p>')+'</div>')+
   (signed?section('4. Actual income and expenses','<div class="projection-metrics"><div><small>Income received</small><strong>'+money(actualIncome,currency)+'</strong></div><div><small>Expenses recorded</small><strong>'+money(actualExpenses,currency)+'</strong></div><div><small>Actual profit/loss</small><strong>'+money(actualProfit,currency)+'</strong></div><div><small>Estimated distributable profit after 5% fee</small><strong>'+money(distributable,currency)+'</strong></div></div><div class="projection-scroll"><table><thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Amount</th></tr></thead><tbody>'+entries.map(x=>'<tr><td>'+esc(x.entry_date)+'</td><td>'+esc(x.entry_type)+'</td><td>'+esc(x.category)+'</td><td>'+esc(x.description)+'</td><td>'+money(x.amount,currency)+'</td></tr>').join('')+'</tbody></table></div>')+
   section('5. Proposed distribution and recorded payouts','<p class="muted">Calculated shares are proposals, not proof of payment. A payout appears as recorded only when the initiator enters a payment reference.</p><div class="projection-scroll"><table><thead><tr><th>Participant</th><th>Projected share</th><th>Actual calculated share</th><th>Recorded payments</th></tr></thead><tbody>'+people.map(x=>{const share=Number(x.profit_share_percent||0)/100;const paid=payments.filter(y=>y.participant_id===x.id).reduce((n,y)=>n+Number(y.amount),0);return '<tr><td>'+esc(x.display_name)+'</td><td>'+money((Math.max(0,projectedProfit)-feeProjected)*share,currency)+'</td><td>'+money(distributable*share,currency)+'</td><td>'+money(paid,currency)+'</td></tr>'}).join('')+'</tbody></table></div>')+
+  (signed?section('Nium payout plan — review only','<p>Cloud Collabo fee: 5% of positive actual profit. Nium is not connected; this does not send or hold funds.</p><button type="button" id="load-nium-plan">Calculate proposed payout plan</button><div id="nium-plan-result" role="status"></div>'):'')+
   section('6. Project closure','<p><strong>Financial status:</strong> '+esc(s.closure_status||'active')+'</p><p>Compare original estimates against actual results, confirm every contribution, agree profit shares and record payments before closing the project.</p>'):'<p class="muted">Actual receipts, expenses and payment references are private to approved project participants.</p>')+
   (data.is_owner?'<div id="projection-editor">'+
   section('Edit projection','<form id="projection-settings-form"><label>Currency (3-letter code)<input name="currency" maxlength="3" required value="'+esc(currency)+'"></label><label>Projected revenue<input name="projected_revenue" type="number" min="0" step="0.01" required value="'+Number(s.projected_revenue||0)+'"></label><label>Projected expenses<input name="projected_expenses" type="number" min="0" step="0.01" required value="'+Number(s.projected_expenses||0)+'"></label><label>Project status<select name="closure_status"><option value="active">Active</option><option value="review">Under final review</option><option value="closed">Closed — lock financial entries</option></select></label><button class="primary">Save projection</button></form>')+
@@ -99,6 +100,17 @@ async function showProjection(projectId){
   section('Record a completed participant payment','<form id="projection-payment-form"><label>Participant<select name="participant_id" required>'+people.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.display_name)+'</option>').join('')+'</select></label><label>Amount paid<input name="amount" type="number" min="0.01" step="0.01" required></label><label>Payment reference<input name="reference" required placeholder="Bank or transfer confirmation"></label><button class="primary">Record payment</button></form>')+
   '<p id="projection-feedback" role="status"></p></div>':'');
   
+  root.querySelector('#load-nium-plan')?.addEventListener('click',async()=>{
+   const output=root.querySelector('#nium-plan-result');output.textContent='Calculating…';
+   try{
+    const plan=await api('/projects/'+projectId+'/payout-plan');
+    const wrap=document.createElement('div'),summary=document.createElement('p');
+    summary.textContent='Actual profit: '+money(plan.actual_profit,plan.currency)+' | Cloud Collabo 5%: '+money(plan.platform_fee,plan.currency)+' | Participant pool: '+money(plan.participant_pool,plan.currency);
+    wrap.append(summary);
+    for(const person of plan.recipients){const row=document.createElement('p');row.textContent=person.name+' ('+person.role+'): '+(person.proposed_amount===null?'Share not agreed':money(person.proposed_amount,plan.currency));wrap.append(row)}
+    const note=document.createElement('p');note.textContent=plan.notice;wrap.append(note);output.replaceChildren(wrap);
+   }catch(err){output.textContent=err.message}
+  });
   const sim=root.querySelector('#collabo-simulator');
   if(sim){
    const renderSim=()=>{

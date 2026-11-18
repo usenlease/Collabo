@@ -101,6 +101,30 @@ export default {
   if(!user) return json({error:'Sign in required'},401);
   try {
 
+   // Nium-ready payment plan: read-only. Never send funds or infer settlement from ledger entries.
+   const payoutPlan=/^\/api\/projects\/([a-f0-9-]{36})\/payout-plan$/.exec(url.pathname);
+   if(payoutPlan&&request.method==='GET'){
+    const projectId=payoutPlan[1];
+    const project=await env.DB.prepare('SELECT id,title,owner_clerk_id FROM projects WHERE id=?').bind(projectId).first();
+    if(!project)return json({error:'Project not found'},404);
+    if(project.owner_clerk_id!==user){
+     const approved=await env.DB.prepare("SELECT 1 FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(projectId,user).first();
+     if(!approved)return json({error:'Only approved project participants can view the payout plan'},403);
+    }
+    const [settings,participants,ledger]=await Promise.all([
+     env.DB.prepare('SELECT currency,closure_status FROM collabo_projection_settings WHERE project_id=?').bind(projectId).first(),
+     env.DB.prepare('SELECT id,display_name,role_name,profit_share_percent FROM collabo_projection_participants WHERE project_id=?').bind(projectId).all(),
+     env.DB.prepare("SELECT COALESCE(SUM(CASE WHEN entry_type='income' THEN amount ELSE -amount END),0) AS profit FROM collabo_projection_entries WHERE project_id=?").bind(projectId).first()
+    ]);
+    const profit=Number(ledger?.profit||0),grossProfit=Math.max(0,profit);
+    const fee=Math.round(grossProfit*0.05*100)/100,pool=Math.round((grossProfit-fee)*100)/100;
+    const people=participants.results||[];
+    const shareTotal=people.reduce((n,p)=>n+Number(p.profit_share_percent||0),0);
+    const ready=people.length>0&&people.every(p=>p.profit_share_percent!==null)&&Math.abs(shareTotal-100)<0.001&&settings?.closure_status==='closed';
+    const recipients=people.map(p=>({participant_id:p.id,name:p.display_name,role:p.role_name,share_percent:p.profit_share_percent,proposed_amount:p.profit_share_percent==null?null:Math.round(pool*Number(p.profit_share_percent)/100*100)/100}));
+    return json({project:{id:project.id,title:project.title},provider:'nium',provider_status:'not_connected',currency:settings?.currency||'USD',actual_profit:profit,success_fee_percent:5,platform_fee:fee,participant_pool:pool,share_total:shareTotal,recipients,ready_for_review:ready,transfers_enabled:false,notice:'Proposal only. No money is held or transferred by Cloud Collabo. Nium onboarding, approved payout routes, recipient verification, legally compliant custody/settlement and payment reconciliation are required before live payouts.'});
+   }
+
    const projection=/^\/api\/projects\/([a-f0-9-]{36})\/projection(?:\/(participants|entries|milestones|payments|settings))?$/.exec(url.pathname);
    if(projection){
     const id=projection[1],section=projection[2]||'summary';
