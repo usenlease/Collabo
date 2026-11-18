@@ -45,5 +45,22 @@
   },
   "ai": {
     "binding": "AI"
+  },
+  "previews": {
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_id": "8efe01be-c2bc-415b-ba8c-b0a2844a18ed"
+      }
+    ],
+    "r2_buckets": [
+      {
+        "binding": "PROJECT_PICTURES",
+        "bucket_name": "collabo-project-pictures-preview"
+      }
+    ],
+    "ai": {
+      "binding": "AI"
+    }
   }
 }
