@@ -53,8 +53,10 @@
     } catch (error) { failure('signing out', error); }
   };
   function refresh() {
-    if (!button) return;
+    // The standalone /admin/ page has no homepage #sign button.
+    // Still notify its dashboard whenever Clerk becomes ready or the session changes.
     window.dispatchEvent(new Event('cloudcollabo-auth-changed'));
+    if (!button) return;
     if (clerk.user) {
       button.textContent = 'My account';
       let logout = document.getElementById('sign-out');
