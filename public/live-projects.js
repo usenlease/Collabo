@@ -205,9 +205,23 @@ async function normalizePicture(file){
  }finally{if(url)URL.revokeObjectURL(url);if(image&&typeof image.close==='function')image.close()}
 }
 async function uploadPictures(projectId,files,feedback){
- for(let i=0;i<files.length;i++){if(!files[i])continue;
-  feedback.textContent='Uploading picture '+(i+1)+' of 3…';
-  await api('/projects/'+projectId+'/pictures/'+(i+1),{method:'PUT',headers:{'content-type':files[i].type},body:files[i]});
+ const selected=files.map((file,i)=>file?i:-1).filter(i=>i>=0);
+ for(let n=0;n<selected.length;n++){
+  const i=selected[n],file=files[i];
+  feedback.textContent='Uploading picture '+(n+1)+' of '+selected.length+'…';
+  let lastError;
+  for(let attempt=0;attempt<3;attempt++){
+   try{
+    const result=await api('/projects/'+projectId+'/pictures/'+(i+1),{method:'PUT',headers:{'content-type':file.type||'image/jpeg'},body:file});
+    if(!result.saved)throw Error('Picture upload was not confirmed');
+    lastError=null;break;
+   }catch(error){
+    lastError=error;
+    if(/not configured|not available|not found|Only the Initiator|file content|picture type|Maximum picture size/i.test(error.message))break;
+    if(attempt<2)feedback.textContent='Retrying picture '+(n+1)+'…';
+   }
+  }
+  if(lastError)throw Error('Picture '+(i+1)+' could not be uploaded: '+lastError.message);
  }
 }
 
@@ -247,7 +261,7 @@ f.addEventListener('input',save);f.addEventListener('change',save);
 category.addEventListener('change',categoryChange);
 countrySearch.addEventListener('input',()=>{const previous=country.value;resolveCountry();if(previous!==country.value){state.value='';city.value='';suggestions()}save()});
 state.addEventListener('input',()=>{suggestions();save()});
-f.onsubmit=async e=>{e.preventDefault();flushDraft();if(!window.cloudCollaboIsSignedIn?.()){window.cloudCollaboPendingPage='post';document.getElementById('project-feedback').textContent='Create an account or sign in to publish. Your draft is saved.';window.cloudCollaboSignIn?.();return}if(!resolveCountry()){countrySearch.reportValidity();return}const b=f.querySelector('button[type=submit]'),out=document.getElementById('project-feedback');b.disabled=true;out.className='muted';out.textContent='Publishing…';try{const payload=Object.fromEntries(new FormData(f));payload.needs=getNeeds();payload.category=category.value==='Other'?other.value.trim()||'Other':category.value;payload.location=[city.value.trim(),state.value.trim(),countries.of(country.value)].filter(Boolean).join(', ');payload.picture_count=pictureFiles.filter(Boolean).length;let id=localStorage.getItem(projectPublishIdKey);if(!id){id=crypto.randomUUID();localStorage.setItem(projectPublishIdKey,id)}payload.client_project_id=id;const d=await api('/projects',{method:'POST',body:JSON.stringify(payload)});await uploadPictures(d.id,pictureFiles,out);localStorage.removeItem(draftKey);localStorage.removeItem(projectPublishIdKey);await clearImageDraft();out.className='success';out.textContent='Project and '+payload.picture_count+' picture(s) published successfully.';location.hash='project/'+d.id}catch(err){out.className='error';out.textContent=err.message+' Your draft and selected pictures are preserved. Retrying will resume the same project rather than creating a duplicate.'}finally{b.disabled=false}};return}
+f.onsubmit=async e=>{e.preventDefault();flushDraft();if(!window.cloudCollaboIsSignedIn?.()){window.cloudCollaboPendingPage='post';document.getElementById('project-feedback').textContent='Create an account or sign in to publish. Your draft is saved.';window.cloudCollaboSignIn?.();return}if(!resolveCountry()){countrySearch.reportValidity();return}const b=f.querySelector('button[type=submit]'),out=document.getElementById('project-feedback');b.disabled=true;out.className='muted';out.textContent='Publishing…';try{const payload=Object.fromEntries(new FormData(f));payload.needs=getNeeds();payload.category=category.value==='Other'?other.value.trim()||'Other':category.value;payload.location=[city.value.trim(),state.value.trim(),countries.of(country.value)].filter(Boolean).join(', ');payload.picture_count=pictureFiles.filter(Boolean).length;let id=localStorage.getItem(projectPublishIdKey);if(!id){id=crypto.randomUUID();localStorage.setItem(projectPublishIdKey,id)}payload.client_project_id=id;const d=await api('/projects',{method:'POST',body:JSON.stringify(payload)});await uploadPictures(d.id,pictureFiles,out);localStorage.removeItem(draftKey);localStorage.removeItem(projectPublishIdKey);await clearImageDraft();out.className='success';out.textContent='Project and '+payload.picture_count+' picture(s) published successfully.';location.hash='project/'+d.id}catch(err){out.className='muted';out.textContent='Upload not completed. '+err.message+' Your draft and pictures are safe. Select Publish project again to retry without creating a duplicate.'}finally{b.disabled=false}};return}
 
 async function initializeGlobalCollaboMap(projects){
  const toggle=document.getElementById('collabo-map-toggle'),panel=document.getElementById('collabo-world-map'),notice=document.getElementById('collabo-map-notice');
