@@ -113,10 +113,29 @@ export default {
      ]);
      const all=projects.results,apps=applications.results;
      const joined=new Set([...all.map(x=>x.owner_clerk_id),...apps.map(x=>x.applicant_clerk_id)]);
+     let clerkMembers=null,clerkTotal=null,clerkError=null;
+     if(env.CLERK_SECRET_KEY){
+      try{
+       const endpoint=String(env.CLERK_API_URL||'https://api.clerk.com').replace(/\\/$/,'');
+       const headers={Authorization:'Bearer '+env.CLERK_SECRET_KEY};
+       const response=await fetch(endpoint+'/v1/users/count',{headers});
+       if(!response.ok)throw Error('Clerk count request failed ('+response.status+')');
+       clerkTotal=Number((await response.json()).total_count);
+       if(!Number.isFinite(clerkTotal))throw Error('Invalid Clerk member count');
+       clerkMembers=[];
+       for(let offset=0;offset<Math.min(clerkTotal,500);offset+=100){
+        const page=await fetch(endpoint+'/v1/users?limit=100&offset='+offset+'&order_by=-created_at',{headers});
+        if(!page.ok)throw Error('Clerk member list failed ('+page.status+')');
+        const users=await page.json();if(!Array.isArray(users))throw Error('Invalid Clerk member list');
+        clerkMembers.push(...users.map(u=>({id:u.id,name:[u.first_name,u.last_name].filter(Boolean).join(' '),email:(u.email_addresses||[]).find(e=>e.id===u.primary_email_address_id)?.email_address||u.email_addresses?.[0]?.email_address||'',joined_at:u.created_at,initiator:all.some(p=>p.owner_clerk_id===u.id),collaborator:apps.some(a=>a.applicant_clerk_id===u.id)})));
+        if(users.length<100)break;
+       }
+      }catch(e){clerkMembers=null;clerkTotal=null;clerkError=String(e.message||e)}
+     }else clerkError='Set CLERK_SECRET_KEY as a Cloudflare Worker secret to retrieve registrations.';
      const approved=new Set(apps.filter(x=>x.status==='approved').map(x=>x.project_id));
      const count={total:all.length,completed:all.filter(x=>x.status==='closed').length,paused:all.filter(x=>x.status==='paused').length,ongoing:all.filter(x=>approved.has(x.id)&&x.status==='open').length,no_collaborators:all.filter(x=>!approved.has(x.id)).length};
      const locations={};for(const p of all){const place=(p.location||'Unspecified').split(',').map(x=>x.trim()).filter(Boolean).pop()||'Unspecified';locations[place]=(locations[place]||0)+1}
-     return json({member_counts:{known_unique_members:joined.size,initiators:new Set(all.map(x=>x.owner_clerk_id)).size,applicants:new Set(apps.map(x=>x.applicant_clerk_id)).size,note:'Counts include participants recorded in projects and applications; not all Clerk registrations.'},members:[...joined].slice(0,500).map(id=>({id,initiator:all.some(p=>p.owner_clerk_id===id),collaborator:apps.some(a=>a.applicant_clerk_id===id)})),collabos:all.map(p=>({...p,approved_collaborators:apps.filter(a=>a.project_id===p.id&&a.status==='approved').length,applications:apps.filter(a=>a.project_id===p.id).length})),count,locations:Object.entries(locations).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count})),finances:{collected:null,transacted:null,note:'No verified platform payment ledger is connected. Project estimates are not revenue.'},email:{enabled:false,note:'Bulk email requires a configured provider, consent controls, and delivery logs.'}});
+     return json({member_counts:{registered_total:clerkTotal,known_unique_members:joined.size,initiators:new Set(all.map(x=>x.owner_clerk_id)).size,applicants:new Set(apps.map(x=>x.applicant_clerk_id)).size,note:clerkError||'Total from Clerk; showing up to 500 latest members. Role counts use project activity.'},members:clerkMembers||[],collabos:all.map(p=>({...p,approved_collaborators:apps.filter(a=>a.project_id===p.id&&a.status==='approved').length,applications:apps.filter(a=>a.project_id===p.id).length})),count,locations:Object.entries(locations).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count})),finances:{collected:null,transacted:null,note:'No verified platform payment ledger is connected. Project estimates are not revenue.'},email:{enabled:false,note:'Bulk email requires a configured provider, consent controls, and delivery logs.'}});
     }
     return json({error:'Admin endpoint unavailable'},404);
    }
