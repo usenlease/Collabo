@@ -65,11 +65,11 @@ exploreHeadingStyle.textContent=`
 @media (max-width:700px){
  .market #project-list>article>h3:first-child,
  .market #project-details>article>h3:first-child{
-  display:block!important;background:linear-gradient(115deg,#143c8a 0%,#2662ba 58%,#087e8b 100%)!important;
-  color:#fff!important;border-radius:12px!important;padding:13px 15px!important;
+  display:block!important;background:linear-gradient(115deg,#f8eed7 0%,#f4e7c6 58%,#ecdbb2 100%)!important;
+  color:#29251d!important;border-radius:12px!important;padding:13px 15px!important;
   margin:0 0 12px!important;font-size:clamp(19px,5vw,24px)!important;
   line-height:1.3!important;font-weight:800!important;letter-spacing:.1px;
-  overflow-wrap:anywhere;box-shadow:0 4px 12px rgba(20,60,138,.16)
+  overflow-wrap:anywhere;box-shadow:0 4px 12px rgba(111,85,35,.12)
  }
  .market #project-details>article>h3:not(:first-child),
  .market #project-list>article>strong{
