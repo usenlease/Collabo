@@ -33,7 +33,7 @@ const clean=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
 // AUTOINCREMENT prevents reuse after deletion; UNIQUE prevents duplicate assignments.
 async function ensureCollaboSerials(db){
  await db.prepare("CREATE TABLE IF NOT EXISTS collabo_serials (serial INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL UNIQUE)").run();
- await db.prepare("INSERT OR IGNORE INTO collabo_serials(project_id) SELECT id FROM projects ORDER BY created_at,id").run();
+ await db.prepare("INSERT OR IGNORE INTO collabo_serials(project_id) SELECT id FROM projects ORDER BY datetime(created_at) ASC, rowid ASC").run();
 }
 const collaboNumber=n=>n==null?null:'CC-'+String(n).padStart(6,'0');
 export default {
@@ -396,6 +396,8 @@ export default {
     if(Number(b.picture_count||0)>0&&!env.PROJECT_PICTURES)return json({error:'Picture storage is not configured. Publishing was stopped before creating another incomplete project.',code:'PICTURE_STORAGE_UNAVAILABLE'},503);
     const needsTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_needs'").first();
     if(!needsTable)return json({error:'Publishing is temporarily unavailable: the project requirements database needs setup. Your draft is still on this device. Please try again after the database repair.',code:'PROJECT_NEEDS_SETUP_REQUIRED'},503);
+    // Number existing Collabos before inserting a new one, preserving historical order.
+    await ensureCollaboSerials(env.DB);
     const id=/^[a-f0-9-]{36}$/.test(b.client_project_id||'')?b.client_project_id:crypto.randomUUID();
     const existing=await env.DB.prepare('SELECT id,owner_clerk_id FROM projects WHERE id=?').bind(id).first();
     if(existing){if(existing.owner_clerk_id!==user)return json({error:'Project identifier conflict'},409);await ensureCollaboSerials(env.DB);const serial=await env.DB.prepare('SELECT serial FROM collabo_serials WHERE project_id=?').bind(id).first();return json({id,collabo_number:collaboNumber(serial?.serial),already_published:true},200)}
