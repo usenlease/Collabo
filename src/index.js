@@ -122,6 +122,26 @@ export default {
      }
     }
     if(!authorized)return json({error:'Administrator access is not configured for this account.'},403);
+    const moderation=/^\/api\/admin\/projects\/([a-f0-9-]{36})\/moderation$/.exec(url.pathname);
+    if(moderation&&request.method==='POST'){
+     const payload=await body(request),action=clean(payload?.action,32),reason=clean(payload?.reason,1000);
+     if(!['pause','resume','reject','clarification','delete'].includes(action))return json({error:'Invalid moderation action'},400);
+     if(action!=='resume'&&reason.length<5)return json({error:'Provide a reason (at least 5 characters)'},400);
+     const project=await env.DB.prepare('SELECT id,status FROM projects WHERE id=?').bind(moderation[1]).first();
+     if(!project)return json({error:'Collabo not found'},404);
+     await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_project_moderation (project_id TEXT PRIMARY KEY, action TEXT NOT NULL, reason TEXT NOT NULL, admin_clerk_id TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+     await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_project_moderation_log (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, action TEXT NOT NULL, reason TEXT NOT NULL, admin_clerk_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+     const previous=await env.DB.prepare('SELECT action FROM admin_project_moderation WHERE project_id=?').bind(project.id).first();
+     if(previous?.action==='delete'&&action!=='delete')return json({error:'Deleted Collabos cannot be resumed from this screen'},409);
+     if(action==='resume'&&project.status==='closed')return json({error:'Completed Collabos cannot be resumed'},409);
+     const nextStatus=action==='resume'?'open':'paused';
+     await env.DB.batch([
+      env.DB.prepare("INSERT INTO admin_project_moderation_log(id,project_id,action,reason,admin_clerk_id) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),project.id,action,reason,user),
+      env.DB.prepare("INSERT INTO admin_project_moderation(project_id,action,reason,admin_clerk_id,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(project_id) DO UPDATE SET action=excluded.action,reason=excluded.reason,admin_clerk_id=excluded.admin_clerk_id,updated_at=CURRENT_TIMESTAMP").bind(project.id,action,reason,user),
+      env.DB.prepare("UPDATE projects SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(nextStatus,project.id)
+     ]);
+     return json({saved:true,action,status:nextStatus});
+    }
     if(url.pathname==='/api/admin/overview'&&request.method==='GET'){
      const tables=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
      const available=new Set(tables.results.map(x=>x.name));
@@ -130,11 +150,13 @@ export default {
       available.has('role_applications')?env.DB.prepare("SELECT project_id,applicant_clerk_id,status FROM role_applications").all():Promise.resolve({results:[]})
      ]);
      const all=projects.results,apps=applications.results;
+     const moderationRows=available.has('admin_project_moderation')?(await env.DB.prepare('SELECT project_id,action,reason FROM admin_project_moderation').all()).results:[];
+     const moderationByProject=new Map(moderationRows.map(m=>[m.project_id,m]));
      const joined=new Set([...all.map(x=>x.owner_clerk_id),...apps.map(x=>x.applicant_clerk_id)]);
      const approved=new Set(apps.filter(x=>x.status==='approved').map(x=>x.project_id));
      const count={total:all.length,completed:all.filter(x=>x.status==='closed').length,paused:all.filter(x=>x.status==='paused').length,ongoing:all.filter(x=>approved.has(x.id)&&x.status==='open').length,no_collaborators:all.filter(x=>!approved.has(x.id)).length};
      const locations={};for(const p of all){const place=(p.location||'Unspecified').split(',').map(x=>x.trim()).filter(Boolean).pop()||'Unspecified';locations[place]=(locations[place]||0)+1}
-     return json({member_counts:{known_unique_members:joined.size,initiators:new Set(all.map(x=>x.owner_clerk_id)).size,applicants:new Set(apps.map(x=>x.applicant_clerk_id)).size,note:'Counts include participants recorded in projects and applications; not all Clerk registrations.'},members:[...joined].slice(0,500).map(id=>({id,initiator:all.some(p=>p.owner_clerk_id===id),collaborator:apps.some(a=>a.applicant_clerk_id===id)})),collabos:all.map(p=>({...p,approved_collaborators:apps.filter(a=>a.project_id===p.id&&a.status==='approved').length,applications:apps.filter(a=>a.project_id===p.id).length})),count,locations:Object.entries(locations).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count})),finances:{collected:null,transacted:null,note:'No verified platform payment ledger is connected. Project estimates are not revenue.'},email:{enabled:false,note:'Bulk email requires a configured provider, consent controls, and delivery logs.'}});
+     return json({member_counts:{known_unique_members:joined.size,initiators:new Set(all.map(x=>x.owner_clerk_id)).size,applicants:new Set(apps.map(x=>x.applicant_clerk_id)).size,note:'Counts include participants recorded in projects and applications; not all Clerk registrations.'},members:[...joined].slice(0,500).map(id=>({id,initiator:all.some(p=>p.owner_clerk_id===id),collaborator:apps.some(a=>a.applicant_clerk_id===id)})),collabos:all.map(p=>({...p,moderation_action:moderationByProject.get(p.id)?.action||null,moderation_reason:moderationByProject.get(p.id)?.reason||null,approved_collaborators:apps.filter(a=>a.project_id===p.id&&a.status==='approved').length,applications:apps.filter(a=>a.project_id===p.id).length})),count,locations:Object.entries(locations).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count})),finances:{collected:null,transacted:null,note:'No verified platform payment ledger is connected. Project estimates are not revenue.'},email:{enabled:false,note:'Bulk email requires a configured provider, consent controls, and delivery logs.'}});
     }
     return json({error:'Admin endpoint unavailable'},404);
    }
