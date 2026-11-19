@@ -565,6 +565,16 @@ export default {
     const p=await env.DB.prepare('SELECT owner_clerk_id,status FROM projects WHERE id=?').bind(rolesRoute[1]).first();
     if(!p)return json({error:'Project not found'},404);
     if(p.owner_clerk_id===user||p.status!=='open')return json({error:'Applications unavailable'},403);
+    // Reject role applications until the authenticated Clerk profile has a real first and last name.
+    if(!env.CLERK_SECRET_KEY)return json({error:'Profile verification is temporarily unavailable. Please try again later.',code:'PROFILE_VERIFICATION_UNAVAILABLE'},503);
+    let applicantProfile;
+    try{
+     const response=await fetch('https://api.clerk.com/v1/users/'+encodeURIComponent(user),{headers:{Authorization:'Bearer '+env.CLERK_SECRET_KEY}});
+     if(!response.ok)return json({error:'Unable to verify your registered name. Please try again.',code:'PROFILE_VERIFICATION_FAILED'},503);
+     applicantProfile=await response.json();
+    }catch(error){return json({error:'Unable to verify your registered name. Please try again.',code:'PROFILE_VERIFICATION_FAILED'},503)}
+    const firstName=String(applicantProfile.first_name||'').trim(),lastName=String(applicantProfile.last_name||'').trim();
+    if(!firstName||!lastName)return json({error:'Your account must have your registered first and last name before you can apply. Update your account profile and try again.',code:'PROFILE_NAME_REQUIRED'},422);
     const b=await body(request);
     const n=await env.DB.prepare('SELECT id,quantity FROM project_needs WHERE id=? AND project_id=?').bind(b?.need_id,rolesRoute[1]).first();
     if(!n)return json({error:'Choose a listed role or resource'},400);
