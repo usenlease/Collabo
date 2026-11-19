@@ -244,9 +244,37 @@ async function showProjection(projectId){
   const sim=root.querySelector('#collabo-simulator');
   if(sim){
    const renderSim=()=>{
-    const revenue=Math.max(0,Number(sim.querySelector('#sim-revenue').value)||0)*Number(sim.querySelector('#sim-scenario').value);
-    const expenses=Math.max(0,Number(sim.querySelector('#sim-expenses').value)||0);
-    const rate=Math.max(0,Math.min(100,Number(sim.querySelector('#sim-tax').value)||0));
+    const revenueInput=sim.querySelector('#sim-revenue');
+    const expensesInput=sim.querySelector('#sim-expenses');
+    const taxInput=sim.querySelector('#sim-tax');
+    const output=sim.querySelector('#sim-output');
+    const validateNonnegative=(input,label)=>{
+     const raw=input.value.trim(),value=Number(raw);
+     const invalid=raw===''||!Number.isFinite(value)||value<0||value>1e12;
+     input.setCustomValidity(invalid?label+' must be a valid non-negative amount.':'');
+     input.setAttribute('aria-invalid',String(invalid));
+     return invalid;
+    };
+    const invalidRevenue=validateNonnegative(revenueInput,'Projected revenue');
+    const invalidExpenses=validateNonnegative(expensesInput,'Projected expenses');
+    const taxValue=Number(taxInput.value);
+    const invalidTax=taxInput.value.trim()===''||!Number.isFinite(taxValue)||taxValue<0||taxValue>100;
+    taxInput.setCustomValidity(invalidTax?'Estimated tax rate must be between 0 and 100.':'');
+    taxInput.setAttribute('aria-invalid',String(invalidTax));
+    let feedback=sim.querySelector('#sim-validation-message');
+    if(!feedback){
+     feedback=document.createElement('p');
+     feedback.id='sim-validation-message';
+     feedback.setAttribute('role','alert');
+     feedback.style.cssText='color:#b91c1c;font-weight:600;margin:10px 0;';
+     sim.querySelector('.projection-metrics').after(feedback);
+    }
+    const invalid=invalidRevenue||invalidExpenses||invalidTax;
+    feedback.textContent=invalid?(invalidExpenses?'Projected expenses cannot be negative. Enter zero or a positive amount.':invalidRevenue?'Projected revenue must be zero or greater.':'Estimated tax rate must be between 0 and 100.'):'';
+    if(invalid){output.innerHTML='';return;}
+    const revenue=Number(revenueInput.value)*Number(sim.querySelector('#sim-scenario').value);
+    const expenses=Number(expensesInput.value);
+    const rate=taxValue;
     const result=simulate(revenue,expenses,rate);
     const rows=result.shares.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.role)+'</td><td>'+money(x.value,currency)+'</td><td>'+x.pct.toFixed(2)+'%</td><td>'+money(result.pool*x.pct/100,currency)+'</td></tr>').join('');
     sim.querySelector('#sim-output').innerHTML='<div class="projection-metrics"><div><small>Projected revenue</small><strong>'+money(revenue,currency)+'</strong></div><div><small>Projected expenses</small><strong>'+money(expenses,currency)+'</strong></div><div><small>Profit / loss</small><strong>'+money(result.profit,currency)+'</strong></div><div><small>5% fee (positive profit only)</small><strong>'+money(result.fee,currency)+'</strong></div><div><small>Estimated tax</small><strong>'+money(result.tax,currency)+'</strong></div><div><small>Estimated participant profit pool</small><strong>'+money(result.pool,currency)+'</strong></div></div><div class="projection-scroll"><table><thead><tr><th>Participant</th><th>Role</th><th>Contribution</th><th>Share</th><th>Projected profit</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+(simulationParticipants.length===0?'<p>No participant contributions recorded. Add initiator and collaborator contributions to calculate shares.</p>':'')+(!result.validAgreed?'<p class="muted">Provisional contribution-based distribution; negotiated shares not finalized.</p>':'');
