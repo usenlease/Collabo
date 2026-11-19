@@ -1,0 +1,29 @@
+/* Cloud Collabo mobile refresh: layout-only; preserve original logo, copy and workflows. */
+@media (max-width: 650px) {
+ html,body,body:has(.market){background:#fff!important;overflow-x:hidden!important}
+ header{width:100%;min-width:0;box-sizing:border-box;padding:8px 10px!important;gap:6px!important}
+ header .logo{font-size:clamp(12px,3.5vw,16px)!important;gap:5px!important;min-width:0}
+ header .logo svg{width:32px!important;height:38px!important}
+ header .controls{gap:4px!important;min-width:0}
+ header #cc-notification-bell{padding:7px 5px!important;background:#fff!important;border-color:#e5e7eb!important}
+ header #language{width:72px!important;max-width:72px!important;font-size:11px!important;padding:7px 2px!important}
+ header #sign{font-size:12px!important;white-space:nowrap!important;min-width:51px!important;padding:7px 6px!important}
+ .market{background:#fff!important;box-shadow:none!important;border:0!important;border-radius:0!important;margin:0 auto!important;padding:12px 14px 32px!important;max-width:100%!important}
+ .market nav{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:5px!important;padding:5px!important;margin:0 0 16px!important;background:#fff!important;border:1px solid #e1e8e2!important;border-radius:12px!important;box-shadow:none!important}
+ .market nav button{min-width:0!important;width:100%!important;padding:9px 2px!important;font-size:clamp(10px,2.6vw,12px)!important;line-height:1.2!important;border:0!important;background:transparent!important;color:#165b37!important;box-shadow:none!important;white-space:normal!important}
+ .market nav .map-nav-button{background:transparent!important;color:#165b37!important;border:0!important;box-shadow:none!important}
+ .market nav button[data-route="post"]{grid-column:1/-1;background:#087b35!important;color:white!important;border-radius:8px!important;padding:10px!important;font-size:13px!important}
+ .market [data-guest-notice]{font-size:13px!important;line-height:1.5!important;margin:12px 0 16px!important;color:#475569!important}
+ .market .role-banner.initiator{background:#f20b16!important;border:0!important;border-radius:11px!important;box-shadow:none!important;color:#fff!important;padding:12px!important;display:flex!important;align-items:center!important;gap:8px!important;margin:12px 0 18px!important}
+ .market .initiator-banner-copy{color:#fff!important;font-size:14px!important;min-width:0!important}
+ .market .initiator-banner-copy small{color:#fff!important;font-size:11px!important;line-height:1.35!important}
+ .market .initiator-history-button{width:auto!important;max-width:100%!important;margin:0!important;padding:9px 10px!important;font-size:12px!important;background:#fff!important;color:#12643e!important;border:1px solid #fff!important;box-shadow:none!important}
+ .market h2{margin:12px 0!important;line-height:1.2!important}
+ .market input,.market select,.market textarea{max-width:100%!important}
+ .market article{box-shadow:none!important;background:#fff!important}
+ .market .picture,.market .share-highlights,[data-share-highlights]{display:none!important}
+}
+@media(max-width:390px){
+ .market .role-banner.initiator{flex-wrap:wrap!important}
+ .market .initiator-history-button{width:100%!important}
+}
