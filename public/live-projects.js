@@ -284,15 +284,18 @@ async function showProjection(projectId){
   }
 if(data.is_owner){
    root.querySelector('[name="closure_status"]').value=s.closure_status||'active';
-   const date=root.querySelector('[name="entry_date"]');date.value=new Date().toISOString().slice(0,10);
+   const date=root.querySelector('[name="entry_date"]');const today=new Date();date.value=[today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');
    for(const [formId,path,method] of [['projection-settings-form','settings','PUT'],['projection-participant-form','participants','POST'],['projection-entry-form','entries','POST'],['projection-milestone-form','milestones','POST'],['projection-payment-form','payments','POST']]){
     const form=root.querySelector('#'+formId);
     form.onsubmit=async event=>{
      event.preventDefault();const btn=form.querySelector('button'),feedback=root.querySelector('#projection-feedback');
      const values=Object.fromEntries(new FormData(form).entries());
+     let inline=form.querySelector('.projection-inline-error');
+     if(!inline){inline=document.createElement('p');inline.className='projection-inline-error';inline.setAttribute('role','alert');inline.setAttribute('tabindex','-1');inline.style.cssText='color:#b91c1c;font-weight:700;margin:10px 0';form.appendChild(inline)}
+     inline.textContent='';
      btn.disabled=true;feedback.textContent='Saving…';
      try{await api('/projects/'+projectId+'/projection/'+path,{method,body:JSON.stringify(values)});await showProjection(projectId)}
-     catch(error){feedback.textContent=error.message;btn.disabled=false}
+     catch(error){inline.textContent=error.message||'Unable to save. Please check the entered values.';feedback.textContent='';btn.disabled=false;inline.focus()}
     };
    }
   }
