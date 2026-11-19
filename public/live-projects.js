@@ -59,6 +59,27 @@ document.head.appendChild(collaboProgressTrackStyle);
 const shareAgreementStyle=document.createElement('style');
 shareAgreementStyle.textContent='.market .share-agreement{margin:12px 0;border:2px solid #c9a341;border-radius:14px;overflow:hidden;background:#fffdf4}.market .share-agreement>summary{cursor:pointer;list-style:none;padding:14px 16px;background:linear-gradient(105deg,#681f74,#9b347c,#d99b35);color:white;font-weight:800;font-size:17px}.market .share-agreement>summary::after{content:" ▾";float:right}.market .share-agreement[open]>summary::after{content:" ▴"}.market .share-agreement-body{padding:14px}.market .share-agreement details{margin:7px 0;border:1px solid #e3d6b8;border-radius:9px}.market .share-agreement details>summary{cursor:pointer;padding:10px;background:#f7eed9;font-weight:700}.market .share-agreement table{width:100%;font-size:13px}.market .share-agreement th,.market .share-agreement td{padding:6px;text-align:left}.market .share-agreement input[type=number]{width:76px;max-width:100%;padding:6px}.market .share-agreement .share-total{font-weight:800;padding:10px;background:#f6f0dc}';
 document.head.appendChild(shareAgreementStyle);
+// Give project names and collaborator headings strong visual hierarchy on mobile, including guest previews.
+const exploreHeadingStyle=document.createElement('style');
+exploreHeadingStyle.textContent=`
+@media (max-width:700px){
+ .market #project-list>article>h3:first-child,
+ .market #project-details>article>h3:first-child{
+  display:block!important;background:linear-gradient(115deg,#143c8a 0%,#2662ba 58%,#087e8b 100%)!important;
+  color:#fff!important;border-radius:12px!important;padding:13px 15px!important;
+  margin:0 0 12px!important;font-size:clamp(19px,5vw,24px)!important;
+  line-height:1.3!important;font-weight:800!important;letter-spacing:.1px;
+  overflow-wrap:anywhere;box-shadow:0 4px 12px rgba(20,60,138,.16)
+ }
+ .market #project-details>article>h3:not(:first-child),
+ .market #project-list>article>strong{
+  display:block!important;background:#e9f6ee!important;color:#14623e!important;
+  border-left:5px solid #1e9a66!important;border-radius:8px!important;
+  padding:9px 12px!important;margin:12px 0 8px!important;font-weight:800!important
+ }
+}
+`;
+document.head.appendChild(exploreHeadingStyle);
 const embeddedChatStyle=document.createElement('style');
 embeddedChatStyle.textContent='.market #project-details>article #team-chat{margin:12px 0 0!important;padding:12px!important;background:#f7fbff;border:1px solid #a9cafa;border-radius:10px}.market #project-details>article #team-chat h3{margin:0 0 7px!important;color:#1557a0}.market #project-details>article #chat-messages{max-height:210px!important;overflow-y:auto;padding:5px 0}.market #project-details>article #chat-messages p{margin:4px 0!important;padding:6px 8px;background:white;border-radius:7px}.market #project-details>article #chat-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin:7px 0}.market #project-details>article #chat-form label{flex:1 1 260px;margin:0}.market #project-details>article #chat-form textarea{min-height:48px;height:54px;margin:4px 0}.market #project-details>article #chat-form button{margin:0}.market #project-details>article #chat-presence-dots{margin:6px 0!important}';
 document.head.appendChild(embeddedChatStyle);
