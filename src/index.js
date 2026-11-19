@@ -302,7 +302,7 @@ export default {
     }
     if(request.method==='PUT'&&section==='settings'){
      const data=await body(request),currency=clean(data?.currency,3).toUpperCase(),revenue=Number(data?.projected_revenue),expenses=Number(data?.projected_expenses),status=data?.closure_status;
-     if(!/^[A-Z]{3}$/.test(currency)||![revenue,expenses].every(v=>Number.isFinite(v)&&v>=0&&v<=1e12)||!['active','review','closed'].includes(status))return json({error:'Invalid projection settings'},400);
+     if(currency!=='USD'||![revenue,expenses].every(v=>Number.isFinite(v)&&v>=0&&v<=1e12)||!['active','review','closed'].includes(status))return json({error:'Invalid projection settings'},400);
      if(status==='closed'){
       const shares=await env.DB.prepare('SELECT COUNT(*) AS count,COALESCE(SUM(profit_share_percent),0) AS total FROM collabo_projection_participants WHERE project_id=?').bind(id).first();
       if(!shares.count||Math.abs(shares.total-100)>0.001)return json({error:'Agree and allocate 100% of profit shares before closure'},409);
