@@ -201,7 +201,7 @@ export default {
    // Store payout preferences only; never accept raw banking credentials or issue transfers.
    if(url.pathname==='/api/me/payout-preference'){
     const exists=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='collabo_payout_preferences'").first();
-    if(!exists)return json({error:'Payment setup is being configured. Apply the payout-preferences migration.'},503);
+    if(!exists)return json({error:'Payment setup is not available yet. Please try again later.'},503);
     if(request.method==='GET'){
      const pref=await env.DB.prepare('SELECT country,method,verification_status,updated_at FROM collabo_payout_preferences WHERE clerk_user_id=?').bind(user).first();
      return json({country:pref?.country||'US',method:pref?.method||null,verification_status:pref?.verification_status||'not_started',updated_at:pref?.updated_at||null,provider:'Nium (pending integration)',bank_details_collected:false});
