@@ -55,7 +55,7 @@
    knownUnreadIds=new Set(unreadItems.map(n=>n.id));initialized=true;
    count.textContent=String(data.unread||0);
    count.style.display=data.unread?'inline':'none';
-   list.innerHTML=items.length?items.map(n=>'<button type="button" data-notification="'+escapeHtml(n.id)+'" style="display:block;width:100%;text-align:left;margin:6px 0;padding:10px;border-radius:8px;background:'+(n.read_at?'#f4f6f5':'#fff6cc')+'"><strong>'+escapeHtml(n.title)+'</strong><span style="display:block;font-size:13px">'+escapeHtml(n.message)+'</span></button>').join(''):'No notifications yet.';
+   list.innerHTML=items.length?items.map(n=>'<button type="button" data-notification="'+escapeHtml(n.id)+'" style="display:block;width:100%;text-align:left;margin:6px 0;padding:10px;border-radius:8px;background:'+(n.read_at?'#f4f6f5':'#fff6cc')+'"><strong>'+escapeHtml(n.title)+'</strong><span style="display:block;font-size:14.3px">'+escapeHtml(n.message)+'</span></button>').join(''):'No notifications yet.';
   }catch(e){list.textContent=e.message}finally{refreshInFlight=false}
  }
  function closePanel(){panel.hidden=true;bell.setAttribute('aria-expanded','false')}
