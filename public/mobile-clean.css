@@ -109,3 +109,25 @@ header [data-signout]{font-size:clamp(15px,1.15vw,18px)!important;font-weight:80
  .market nav button{font-size:clamp(15px,3.8vw,18px)!important;padding:12px 8px!important;min-height:46px!important;white-space:normal!important}
  .market nav button[data-route="post"]{grid-column:1/-1!important}
 }
+
+/* Clerk sign-up dialog: boost text legibility by 15% without altering brand. */
+.cl-modalContent .cl-headerTitle,
+.cl-signUp-root .cl-headerTitle{font-size:clamp(23px,2.4vw,30px)!important;font-weight:800!important}
+.cl-modalContent .cl-headerSubtitle,
+.cl-signUp-root .cl-headerSubtitle{font-size:18px!important;line-height:1.5!important}
+.cl-modalContent .cl-formFieldLabel,
+.cl-modalContent .cl-formFieldInput,
+.cl-modalContent .cl-formButtonPrimary,
+.cl-modalContent .cl-footerActionText,
+.cl-modalContent .cl-footerActionLink,
+.cl-signUp-root .cl-formFieldLabel,
+.cl-signUp-root .cl-formFieldInput,
+.cl-signUp-root .cl-formButtonPrimary,
+.cl-signUp-root .cl-footerActionText,
+.cl-signUp-root .cl-footerActionLink{font-size:17px!important;line-height:1.4!important}
+.cl-modalContent .cl-formFieldHintText,
+.cl-modalContent .cl-formFieldErrorText,
+.cl-modalContent .cl-dividerText,
+.cl-signUp-root .cl-formFieldHintText,
+.cl-signUp-root .cl-formFieldErrorText,
+.cl-signUp-root .cl-dividerText{font-size:15px!important;line-height:1.4!important}
