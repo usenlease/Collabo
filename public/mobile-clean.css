@@ -131,3 +131,10 @@ header [data-signout]{font-size:clamp(15px,1.15vw,18px)!important;font-weight:80
 .cl-signUp-root .cl-formFieldHintText,
 .cl-signUp-root .cl-formFieldErrorText,
 .cl-signUp-root .cl-dividerText{font-size:15px!important;line-height:1.4!important}
+
+/* Team chat threaded replies */
+#chat-reply-preview{border-left:4px solid #15803d;background:#effaf1;padding:10px 12px;margin:8px 0;border-radius:6px;overflow-wrap:anywhere}
+#chat-reply-preview p{margin:4px 0;font-size:0.95em}
+#chat-reply-preview button,.cc-reply-btn{font-size:0.95em;min-height:34px;cursor:pointer}
+.cc-reply-quote{display:block;background:#f1f5f9;border-left:3px solid #15803d;padding:6px 10px;margin:5px 0;cursor:pointer;overflow-wrap:anywhere}
+#chat-messages [data-chat-message]{overflow-wrap:anywhere}
