@@ -591,6 +591,38 @@ function openMessageEditor(message){
  form.querySelector('.cc-cancel-edit').onclick=cancel;
  form.onsubmit=async event=>{event.preventDefault();try{await api('/projects/'+match[1]+'/team-messages/'+id,{method:'PATCH',body:JSON.stringify({message:field.value})});await refresh()}catch(error){form.querySelector('[role="alert"]').textContent=error.message}};
 }
+// Swipe right to reply; vertical scrolling and long-press editing remain independent.
+let replySwipe=null;
+chatBox.addEventListener('touchstart',e=>{
+ if(e.touches.length!==1||e.target.closest('button,textarea,input,select,[data-jump-to],.cc-edit-form'))return;
+ const message=e.target.closest('[data-chat-message]');
+ if(!message)return;
+ const touch=e.touches[0];
+ replySwipe={message,x:touch.clientX,y:touch.clientY,dx:0,vertical:false};
+},{passive:true});
+chatBox.addEventListener('touchmove',e=>{
+ if(!replySwipe||e.touches.length!==1)return;
+ const touch=e.touches[0],dx=touch.clientX-replySwipe.x,dy=touch.clientY-replySwipe.y;
+ if(Math.abs(dy)>12&&Math.abs(dy)>Math.abs(dx)){replySwipe.vertical=true;replySwipe.message.style.transform='';return}
+ if(!replySwipe.vertical&&dx>0&&dx>Math.abs(dy)*1.4){
+  replySwipe.dx=dx;
+  replySwipe.message.style.transition='none';
+  replySwipe.message.style.transform='translateX('+Math.min(dx,65)+'px)';
+ }
+},{passive:true});
+chatBox.addEventListener('touchend',()=>{
+ if(!replySwipe)return;
+ const gesture=replySwipe;replySwipe=null;
+ gesture.message.style.transition='transform 160ms ease';
+ gesture.message.style.transform='';
+ if(gesture.vertical||gesture.dx<55)return;
+ clearTimeout(longPressTimer);
+ const button=gesture.message.querySelector('[data-reply-id]');
+ if(button)button.click();
+},{passive:true});
+chatBox.addEventListener('touchcancel',()=>{
+ if(replySwipe){replySwipe.message.style.transform='';replySwipe=null}
+},{passive:true});
 chatBox.addEventListener('click',e=>{const button=e.target.closest('[data-edit-id]');if(button)openMessageEditor(button.closest('[data-chat-message]'))});
 chatBox.addEventListener('touchstart',e=>{const m=e.target.closest('[data-chat-message]');if(!m||!m.querySelector('[data-edit-id]')||e.target.closest('button,textarea,[data-jump-to]'))return;const t=e.touches[0];longPressStart={x:t.clientX,y:t.clientY};clearTimeout(longPressTimer);longPressTimer=setTimeout(()=>{longPressTimer=null;openMessageEditor(m)},650)},{passive:true});
 chatBox.addEventListener('touchmove',e=>{if(longPressStart&&e.touches.length){const t=e.touches[0];if(Math.hypot(t.clientX-longPressStart.x,t.clientY-longPressStart.y)>12)clearTimeout(longPressTimer)}},{passive:true});
