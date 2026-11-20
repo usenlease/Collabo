@@ -674,7 +674,24 @@ export default {
     if(request.method==='GET'){
      const first=url.searchParams.get('first')==='1';
      const rows=await env.DB.prepare(`SELECT m.id,m.sender_clerk_id,m.body,m.created_at,CASE WHEN m.sender_clerk_id=? THEN 'Initiator' ELSE COALESCE((SELECT GROUP_CONCAT(role_name, ', ') FROM (SELECT DISTINCT n.item_name AS role_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=m.project_id AND a.applicant_clerk_id=m.sender_clerk_id AND a.status='approved' ORDER BY n.item_name)), 'Collaborator') END AS sender_role FROM project_team_messages m WHERE m.project_id=? ORDER BY created_at ${first?'ASC':'DESC'},id ${first?'ASC':'DESC'} LIMIT 100`).bind(p.owner_clerk_id,chat[1]).all();
-     return json({messages:first?rows.results:rows.results.reverse(),first_page:first});
+     // Resolve sender names from verified Clerk profiles; never expose Clerk user IDs in the UI.
+     const messages=first?rows.results:rows.results.reverse();
+     const senderIds=[...new Set(messages.map(m=>m.sender_clerk_id).filter(Boolean))];
+     const names=new Map();
+     if(env.CLERK_SECRET_KEY){
+      for(let offset=0;offset<senderIds.length;offset+=8){
+       await Promise.all(senderIds.slice(offset,offset+8).map(async id=>{
+        try{
+         const res=await fetch('https://api.clerk.com/v1/users/'+encodeURIComponent(id),{headers:{Authorization:'Bearer '+env.CLERK_SECRET_KEY}});
+         if(!res.ok)return;
+         const profile=await res.json();
+         const first=String(profile.first_name||'').trim(),last=String(profile.last_name||'').trim();
+         if(first&&last)names.set(id,first+' '+last);
+        }catch(_error){}
+       }));
+      }
+     }
+     return json({messages:messages.map(m=>({...m,sender_name:names.get(m.sender_clerk_id)||'Name unavailable'})),first_page:first});
     }
     const b=await body(request);if(typeof b?.message!=='string'||!b.message.trim()||b.message.length>2000)return json({error:'Message must be 1–2000 characters'},400);
     const messageId=crypto.randomUUID();
