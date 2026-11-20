@@ -97,16 +97,16 @@ darkTeamChatStyle.textContent=`
 .market #project-details>article #team-chat small,
 .market #project-details>article #chat-presence-count{color:#234533!important}
 .market #project-details>article #chat-messages{background:#f3f7df!important;color:#234533!important}
-.market #project-details>article #chat-messages [data-chat-message]{background:#234533fff!important;color:#234533!important;border:1px solid #d5e3c4!important}
+.market #project-details>article #chat-messages [data-chat-message]{background:#ffffff!important;color:#234533!important;border:1px solid #d5e3c4!important}
 .market #project-details>article #chat-messages [data-chat-message] strong,
 .market #project-details>article #chat-messages [data-chat-message] small{color:#234533!important}
-.market #project-details>article #team-chat textarea{background:#234533fff!important;color:#234533!important;border:1px solid #a7bca7!important}
+.market #project-details>article #team-chat textarea{background:#ffffff!important;color:#234533!important;border:1px solid #a7bca7!important}
 .market #project-details>article #team-chat textarea::placeholder{color:#6c7c6d!important}
 .market #project-details>article #team-chat button{background:#f8faef;color:#234533;border:1px solid #777}
 .market #project-details>article #team-chat button.primary{background:#16803b!important;color:#fff!important;border-color:#16803b!important}
 .market #project-details>article #team-chat .cc-reply-quote{background:#edf5e3!important;color:#234533!important;border-left-color:#22c55e!important}
 .market #project-details>article #team-chat #chat-reply-preview{background:#e5f1db!important;color:#234533!important}
-.market #project-details>article #team-chat .cc-edit-form{background:#234533be9!important;color:#234533!important}
+.market #project-details>article #team-chat .cc-edit-form{background:#fffbe9!important;color:#234533!important}
 .market #project-details>article #team-chat .cc-edited-label{background:#fde047!important;color:#422006!important}
 .market #project-details>article #team-chat [data-chat-message][style*="outline"]{outline-color:#22c55e!important}
 `;
