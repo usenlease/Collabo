@@ -672,6 +672,7 @@ export default {
     if(original.sender_clerk_id!==user)return json({error:'You can only edit your own messages'},403);
     const payload=await body(request);
     if(typeof payload?.message!=='string'||!payload.message.trim()||payload.message.length>2000)return json({error:'Edited message must be 1–2000 characters'},400);
+    if(!(await env.DB.prepare('PRAGMA table_info(project_team_messages)').all()).results.some(c=>c.name==='edited_at'))return json({error:'Editing requires the chat database update',code:'CHAT_EDIT_MIGRATION_REQUIRED'},503);
     await env.DB.prepare('UPDATE project_team_messages SET body=?,edited_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=? AND sender_clerk_id=?').bind(payload.message.trim(),editChat[2],editChat[1],user).run();
     return json({ok:true,edited:true});
    }
@@ -687,9 +688,12 @@ export default {
     }
     const chatTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_team_messages'").first();
     if(!chatTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
+    // Production D1 databases may not yet have the reply/edit columns.
+    const chatColumns=new Set((await env.DB.prepare('PRAGMA table_info(project_team_messages)').all()).results.map(c=>c.name));
+    const hasReply=chatColumns.has('reply_to_id'),hasEdited=chatColumns.has('edited_at');
     if(request.method==='GET'){
      const first=url.searchParams.get('first')==='1';
-     const rows=await env.DB.prepare(`SELECT m.id,m.sender_clerk_id,m.body,m.created_at,m.edited_at,(m.sender_clerk_id=?) AS can_edit,m.reply_to_id, parent.body AS reply_body,parent.sender_clerk_id AS reply_sender_clerk_id,CASE WHEN m.sender_clerk_id=? THEN 'Initiator' ELSE COALESCE((SELECT GROUP_CONCAT(role_name, ', ') FROM (SELECT DISTINCT n.item_name AS role_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=m.project_id AND a.applicant_clerk_id=m.sender_clerk_id AND a.status='approved' ORDER BY n.item_name)), 'Collaborator') END AS sender_role FROM project_team_messages m LEFT JOIN project_team_messages parent ON parent.id=m.reply_to_id AND parent.project_id=m.project_id WHERE m.project_id=? ORDER BY created_at ${first?'ASC':'DESC'},id ${first?'ASC':'DESC'} LIMIT 100`).bind(user,p.owner_clerk_id,chat[1]).all();
+     const rows=await env.DB.prepare(`SELECT m.id,m.sender_clerk_id,m.body,m.created_at,${hasEdited?'m.edited_at':'NULL AS edited_at'},(m.sender_clerk_id=?) AS can_edit,${hasReply?'m.reply_to_id, parent.body AS reply_body,parent.sender_clerk_id AS reply_sender_clerk_id':'NULL AS reply_to_id,NULL AS reply_body,NULL AS reply_sender_clerk_id'},CASE WHEN m.sender_clerk_id=? THEN 'Initiator' ELSE COALESCE((SELECT GROUP_CONCAT(role_name, ', ') FROM (SELECT DISTINCT n.item_name AS role_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=m.project_id AND a.applicant_clerk_id=m.sender_clerk_id AND a.status='approved' ORDER BY n.item_name)), 'Collaborator') END AS sender_role FROM project_team_messages m ${hasReply?'LEFT JOIN project_team_messages parent ON parent.id=m.reply_to_id AND parent.project_id=m.project_id':''} WHERE m.project_id=? ORDER BY created_at ${first?'ASC':'DESC'},id ${first?'ASC':'DESC'} LIMIT 100`).bind(user,p.owner_clerk_id,chat[1]).all();
      // Resolve sender names from verified Clerk profiles; never expose Clerk user IDs in the UI.
      const messages=first?rows.results:rows.results.reverse();
      const senderIds=[...new Set(messages.flatMap(m=>[m.sender_clerk_id,m.reply_sender_clerk_id]).filter(Boolean))];
@@ -717,7 +721,9 @@ export default {
      if(!parent)return json({error:'Original message was not found in this Collabo'},404);
     }
     const messageId=crypto.randomUUID();
-    await env.DB.prepare('INSERT INTO project_team_messages(id,project_id,sender_clerk_id,body,reply_to_id) VALUES(?,?,?,?,?)').bind(messageId,chat[1],user,b.message.trim(),replyToId).run();
+    if(replyToId&&!hasReply)return json({error:'Message replies are temporarily unavailable until the chat database is updated',code:'CHAT_REPLY_MIGRATION_REQUIRED'},503);
+    if(hasReply)await env.DB.prepare('INSERT INTO project_team_messages(id,project_id,sender_clerk_id,body,reply_to_id) VALUES(?,?,?,?,?)').bind(messageId,chat[1],user,b.message.trim(),replyToId).run();
+    else await env.DB.prepare('INSERT INTO project_team_messages(id,project_id,sender_clerk_id,body) VALUES(?,?,?,?)').bind(messageId,chat[1],user,b.message.trim()).run();
     try{
      const recipients=await env.DB.prepare("SELECT DISTINCT applicant_clerk_id AS id FROM role_applications WHERE project_id=? AND status='approved' AND applicant_clerk_id<>? UNION SELECT ? AS id WHERE ?<>?").bind(chat[1],user,p.owner_clerk_id,p.owner_clerk_id,user).all();
      const project=await env.DB.prepare('SELECT title FROM projects WHERE id=?').bind(chat[1]).first();
