@@ -548,16 +548,21 @@ export default {
     const needs=(await env.DB.prepare('SELECT id,item_name,quantity FROM project_needs WHERE project_id=? ORDER BY position').bind(id).all()).results;
     const applications=(await env.DB.prepare("SELECT id,need_id,applicant_clerk_id,offered_quantity,rate_amount,currency FROM role_applications WHERE project_id=? AND status='approved' ORDER BY created_at").bind(id).all()).results;
     const ready=needs.length>0&&needs.every(n=>applications.filter(a=>a.need_id===n.id).reduce((sum,a)=>sum+Number(a.offered_quantity||1),0)>=Number(n.quantity||1));
-    const saved=await env.DB.prepare('SELECT shares_json,updated_at FROM collabo_share_agreement WHERE project_id=?').bind(id).first();
-    if(request.method==='GET')return json({needs,applications,initiator_id:project.owner_clerk_id,ready,shares:saved?JSON.parse(saved.shares_json):null,updated_at:saved?.updated_at||null,is_owner:owner});
+    await env.DB.prepare("ALTER TABLE collabo_share_agreement ADD COLUMN contribution_terms_json TEXT").run().catch(e=>{if(!String(e).includes('duplicate column name'))throw e});
+    const saved=await env.DB.prepare('SELECT shares_json,contribution_terms_json,updated_at FROM collabo_share_agreement WHERE project_id=?').bind(id).first();
+    if(request.method==='GET')return json({needs,applications,initiator_id:project.owner_clerk_id,ready,shares:saved?JSON.parse(saved.shares_json):null,contribution_terms:saved?.contribution_terms_json?JSON.parse(saved.contribution_terms_json):{},updated_at:saved?.updated_at||null,is_owner:owner});
     if(!owner)return json({error:'Only initiator can propose shares'},403);
     if(!ready)return json({error:'Agreement becomes editable when every required role is filled'},409);
-    const data=await body(request),shares=data?.shares;
+    const data=await body(request),shares=data?.shares,terms=data?.contribution_terms||{};
     const ids=[project.owner_clerk_id,...new Set(applications.map(a=>a.applicant_clerk_id))];
     if(!shares||typeof shares!=='object'||Array.isArray(shares)||Object.keys(shares).length!==ids.length||ids.some(key=>!Object.prototype.hasOwnProperty.call(shares,key)||typeof shares[key]!=='number'||!Number.isFinite(shares[key])||shares[key]<0||shares[key]>100))return json({error:'Provide a valid percentage for each participant'},400);
     const total=ids.reduce((sum,key)=>sum+shares[key],0);
     if(Math.abs(total-100)>0.00001)return json({error:'All shares must total exactly 100%'},400);
-    await env.DB.prepare("INSERT INTO collabo_share_agreement(project_id,shares_json) VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET shares_json=excluded.shares_json,updated_at=CURRENT_TIMESTAMP").bind(id,JSON.stringify(shares)).run();
+    if(typeof terms!=='object'||Array.isArray(terms)||Object.keys(terms).some(key=>!ids.includes(key)))return json({error:'Invalid contribution terms'},400);
+    for(const [key,t] of Object.entries(terms)){
+     if(!t||!['hour','day','fixed'].includes(t.unit)||![t.rate,t.quantity].every(v=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=1e9)||t.rate*t.quantity>1e12||(t.unit==='fixed'&&t.quantity!==1))return json({error:'Contribution rate and duration must be valid non-negative amounts'},400);
+    }
+    await env.DB.prepare("INSERT INTO collabo_share_agreement(project_id,shares_json,contribution_terms_json) VALUES(?,?,?) ON CONFLICT(project_id) DO UPDATE SET shares_json=excluded.shares_json,contribution_terms_json=excluded.contribution_terms_json,updated_at=CURRENT_TIMESTAMP").bind(id,JSON.stringify(shares),JSON.stringify(terms)).run();
     return json({saved:true,status:'draft',note:'Draft only. Individual participant acceptance is not yet implemented.'});
    }
    const rolesRoute=/^\/api\/projects\/([a-f0-9-]{36})\/role-applications$/.exec(url.pathname);
