@@ -659,6 +659,22 @@ export default {
     const present=new Set(active.results.map(x=>x.user_id));
     return json({joined:members.length,collaborators_joined:members.length-1,active:members.filter(x=>present.has(x.id)).map(x=>({role:x.role,label:x.role==='initiator'?'Initiator':x.label,id:x.id})),you:user});
    }
+   const editChat=/^\/api\/projects\/([a-f0-9-]{36})\/team-messages\/([a-f0-9-]{36})$/.exec(url.pathname);
+   if(editChat&&request.method==='PATCH'){
+    const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(editChat[1]).first();
+    if(!p)return json({error:'Project not found'},404);
+    if(p.owner_clerk_id!==user){
+     const member=await env.DB.prepare("SELECT id FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(editChat[1],user).first();
+     if(!member)return json({error:'Only approved Collabo participants can edit chat messages'},403);
+    }
+    const original=await env.DB.prepare('SELECT sender_clerk_id FROM project_team_messages WHERE id=? AND project_id=?').bind(editChat[2],editChat[1]).first();
+    if(!original)return json({error:'Message not found'},404);
+    if(original.sender_clerk_id!==user)return json({error:'You can only edit your own messages'},403);
+    const payload=await body(request);
+    if(typeof payload?.message!=='string'||!payload.message.trim()||payload.message.length>2000)return json({error:'Edited message must be 1–2000 characters'},400);
+    await env.DB.prepare('UPDATE project_team_messages SET body=?,edited_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=? AND sender_clerk_id=?').bind(payload.message.trim(),editChat[2],editChat[1],user).run();
+    return json({ok:true,edited:true});
+   }
    const chat=/^\/api\/projects\/([a-f0-9-]{36})\/team-messages$/.exec(url.pathname);
    if(chat&&(request.method==='GET'||request.method==='POST')){
     const p=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(chat[1]).first();
@@ -673,7 +689,7 @@ export default {
     if(!chatTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
     if(request.method==='GET'){
      const first=url.searchParams.get('first')==='1';
-     const rows=await env.DB.prepare(`SELECT m.id,m.sender_clerk_id,m.body,m.created_at,m.reply_to_id, parent.body AS reply_body,parent.sender_clerk_id AS reply_sender_clerk_id,CASE WHEN m.sender_clerk_id=? THEN 'Initiator' ELSE COALESCE((SELECT GROUP_CONCAT(role_name, ', ') FROM (SELECT DISTINCT n.item_name AS role_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=m.project_id AND a.applicant_clerk_id=m.sender_clerk_id AND a.status='approved' ORDER BY n.item_name)), 'Collaborator') END AS sender_role FROM project_team_messages m LEFT JOIN project_team_messages parent ON parent.id=m.reply_to_id AND parent.project_id=m.project_id WHERE m.project_id=? ORDER BY created_at ${first?'ASC':'DESC'},id ${first?'ASC':'DESC'} LIMIT 100`).bind(p.owner_clerk_id,chat[1]).all();
+     const rows=await env.DB.prepare(`SELECT m.id,m.sender_clerk_id,m.body,m.created_at,m.edited_at,(m.sender_clerk_id=?) AS can_edit,m.reply_to_id, parent.body AS reply_body,parent.sender_clerk_id AS reply_sender_clerk_id,CASE WHEN m.sender_clerk_id=? THEN 'Initiator' ELSE COALESCE((SELECT GROUP_CONCAT(role_name, ', ') FROM (SELECT DISTINCT n.item_name AS role_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=m.project_id AND a.applicant_clerk_id=m.sender_clerk_id AND a.status='approved' ORDER BY n.item_name)), 'Collaborator') END AS sender_role FROM project_team_messages m LEFT JOIN project_team_messages parent ON parent.id=m.reply_to_id AND parent.project_id=m.project_id WHERE m.project_id=? ORDER BY created_at ${first?'ASC':'DESC'},id ${first?'ASC':'DESC'} LIMIT 100`).bind(user,p.owner_clerk_id,chat[1]).all();
      // Resolve sender names from verified Clerk profiles; never expose Clerk user IDs in the UI.
      const messages=first?rows.results:rows.results.reverse();
      const senderIds=[...new Set(messages.flatMap(m=>[m.sender_clerk_id,m.reply_sender_clerk_id]).filter(Boolean))];
