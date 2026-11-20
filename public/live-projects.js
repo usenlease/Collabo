@@ -86,6 +86,32 @@ document.head.appendChild(collaboSerialStyle);
 const embeddedChatStyle=document.createElement('style');
 embeddedChatStyle.textContent='.market #project-details>article #team-chat{margin:12px 0 0!important;padding:12px!important;background:#f7fbff;border:1px solid #a9cafa;border-radius:10px}.market #project-details>article #team-chat h3{margin:0 0 7px!important;color:#1557a0}.market #project-details>article #chat-messages{max-height:210px!important;overflow-y:auto;padding:5px 0}.market #project-details>article #chat-messages p{margin:4px 0!important;padding:6px 8px;background:white;border-radius:7px}.market #project-details>article #chat-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin:7px 0}.market #project-details>article #chat-form label{flex:1 1 260px;margin:0}.market #project-details>article #chat-form textarea{min-height:48px;height:54px;margin:4px 0}.market #project-details>article #chat-form button{margin:0}.market #project-details>article #chat-presence-dots{margin:6px 0!important}';
 document.head.appendChild(embeddedChatStyle);
+// High-contrast dark theme scoped exclusively to the Collabo group chat.
+const darkTeamChatStyle=document.createElement('style');
+darkTeamChatStyle.textContent=`
+.market #project-details>article #team-chat{background:#080808!important;color:#fff!important;border:1px solid #444!important;color-scheme:dark}
+.market #project-details>article #team-chat h3,
+.market #project-details>article #team-chat p,
+.market #project-details>article #team-chat label,
+.market #project-details>article #team-chat strong,
+.market #project-details>article #team-chat small,
+.market #project-details>article #chat-presence-count{color:#fff!important}
+.market #project-details>article #chat-messages{background:#080808!important;color:#fff!important}
+.market #project-details>article #chat-messages [data-chat-message]{background:#191919!important;color:#fff!important;border:1px solid #383838!important}
+.market #project-details>article #chat-messages [data-chat-message] strong,
+.market #project-details>article #chat-messages [data-chat-message] small{color:#fff!important}
+.market #project-details>article #team-chat textarea{background:#181818!important;color:#fff!important;border:1px solid #888!important}
+.market #project-details>article #team-chat textarea::placeholder{color:#bbb!important}
+.market #project-details>article #team-chat button{background:#282828;color:#fff;border:1px solid #777}
+.market #project-details>article #team-chat button.primary{background:#16803b!important;color:#fff!important;border-color:#16803b!important}
+.market #project-details>article #team-chat .cc-reply-quote{background:#292929!important;color:#fff!important;border-left-color:#22c55e!important}
+.market #project-details>article #team-chat #chat-reply-preview{background:#1d3024!important;color:#fff!important}
+.market #project-details>article #team-chat .cc-edit-form{background:#262626!important;color:#fff!important}
+.market #project-details>article #team-chat .cc-edited-label{background:#fde047!important;color:#422006!important}
+.market #project-details>article #team-chat [data-chat-message][style*="outline"]{outline-color:#22c55e!important}
+`;
+document.head.appendChild(darkTeamChatStyle);
+
 const compactProjectChatStyle=document.createElement('style');
 compactProjectChatStyle.textContent=`
 /* Recover whitespace in project details and group chat without hiding content. */
@@ -568,7 +594,7 @@ if(p.is_owner||apps.some(a=>a.status==='approved')){
  const chat=document.getElementById('team-chat');
  const projectCard=root.querySelector('article');
  if(projectCard)projectCard.appendChild(chat);
-chat.innerHTML='<h3>Collabo Group Chat</h3><p id="chat-presence-count" role="status">Checking active members…</p><div id="chat-presence-dots" aria-label="Active group chat members" style="display:flex;gap:9px;flex-wrap:wrap;margin:12px 0"></div><button type="button" id="chat-first">Jump to First Message</button><button type="button" id="chat-latest">Latest Messages</button><div id="chat-messages" tabindex="-1" style="max-height:380px;overflow-y:auto;scroll-behavior:smooth">Loading…</div><div id="chat-reply-preview" hidden></div><form id="chat-form"><label>Team message<textarea name="message" maxlength="2000" required></textarea></label><button class="primary" type="submit">Send to team</button></form><button type="button" id="chat-refresh">Refresh messages</button>';const refresh=async(first=false)=>{try{const d=await api('/projects/'+match[1]+'/team-messages'+(first?'?first=1':''));document.getElementById('chat-messages').innerHTML=d.messages.map(m=>'<p data-chat-message="'+esc(m.id)+'"><strong>'+esc((m.sender_name&&m.sender_name!=='Name unavailable'?m.sender_name:'Name unavailable')+' — '+(m.sender_role||'Collaborator'))+':</strong> '+(m.reply_to_id?'<span class="cc-reply-quote" data-jump-to="'+esc(m.reply_to_id)+'" role="button" tabindex="0">↳ '+esc(m.reply_sender_name||'Collaborator')+': '+esc(m.reply_body||'Original message')+'</span>':'')+esc(m.body)+' <small>'+esc(m.created_at)+'</small> <button type="button" class="cc-reply-btn" data-reply-id="'+esc(m.id)+'" data-reply-label="'+esc((m.sender_name||'Collaborator')+' — '+(m.sender_role||'Collaborator'))+'" data-reply-body="'+esc(m.body)+'">↩ Reply</button></p>').join('')||'<p>No messages yet.</p>';const pending=JSON.parse(sessionStorage.getItem('cc-pending-chat-target')||'null');if(pending?.projectId===match[1]){const box=document.getElementById('chat-messages');const target=pending.messageId?[...box.querySelectorAll('[data-chat-message]')].find(el=>el.dataset.chatMessage===pending.messageId):box.lastElementChild;if(target){sessionStorage.removeItem('cc-pending-chat-target');target.style.outline='3px solid #16a34a';target.style.background='#fff8d6';target.scrollIntoView({behavior:'smooth',block:'center'});box.scrollIntoView({behavior:'smooth',block:'center'})}else if(pending.messageId){box.insertAdjacentHTML('beforeend','<p role="status">This message is not among the latest 100 messages.</p>');sessionStorage.removeItem('cc-pending-chat-target')}}}catch(err){document.getElementById('chat-messages').textContent=err.message;if(err.message.includes('being configured')){document.getElementById('chat-form').hidden=true;document.getElementById('chat-refresh').hidden=true};if(err.message.includes('database is being set up')){document.getElementById('chat-form').querySelector('button').disabled=true;document.getElementById('chat-form').querySelector('textarea').disabled=true}}};let replyTarget=null;
+chat.innerHTML='<h3>Collabo Group Chat</h3><p id="chat-presence-count" role="status">Checking active members…</p><div id="chat-presence-dots" aria-label="Active group chat members" style="display:flex;gap:9px;flex-wrap:wrap;margin:12px 0"></div><button type="button" id="chat-first">Jump to First Message</button><button type="button" id="chat-latest">Latest Messages</button><div id="chat-messages" tabindex="-1" style="max-height:380px;overflow-y:auto;scroll-behavior:smooth">Loading…</div><div id="chat-reply-preview" hidden></div><form id="chat-form"><label>Team message<textarea name="message" maxlength="2000" required></textarea></label><button class="primary" type="submit">Send to team</button></form><button type="button" id="chat-refresh">Refresh messages</button>';const refresh=async(first=false)=>{try{const d=await api('/projects/'+match[1]+'/team-messages'+(first?'?first=1':''));document.getElementById('chat-messages').innerHTML=d.messages.map(m=>'<p data-chat-message="'+esc(m.id)+'"><strong>'+esc((m.sender_name&&m.sender_name!=='Name unavailable'?m.sender_name:'Name unavailable')+' — '+(m.sender_role||'Collaborator'))+':</strong> '+(m.reply_to_id?'<span class="cc-reply-quote" data-jump-to="'+esc(m.reply_to_id)+'" role="button" tabindex="0">↳ '+esc(m.reply_sender_name||'Collaborator')+': '+esc(m.reply_body||'Original message')+'</span>':'')+'<span class="cc-message-body">'+esc(m.body)+'</span>'+(m.edited_at?' <mark class="cc-edited-label">Edited</mark>':'')+' <small>'+esc(m.created_at)+'</small> '+(m.can_edit?'<button type="button" class="cc-edit-btn" data-edit-id="'+esc(m.id)+'">Edit</button>':'')+' <button type="button" class="cc-reply-btn" data-reply-id="'+esc(m.id)+'" data-reply-label="'+esc((m.sender_name||'Collaborator')+' — '+(m.sender_role||'Collaborator'))+'" data-reply-body="'+esc(m.body)+'">↩ Reply</button></p>').join('')||'<p>No messages yet.</p>';const pending=JSON.parse(sessionStorage.getItem('cc-pending-chat-target')||'null');if(pending?.projectId===match[1]){const box=document.getElementById('chat-messages');const target=pending.messageId?[...box.querySelectorAll('[data-chat-message]')].find(el=>el.dataset.chatMessage===pending.messageId):box.lastElementChild;if(target){sessionStorage.removeItem('cc-pending-chat-target');target.style.outline='3px solid #16a34a';target.style.background='#fff8d6';target.scrollIntoView({behavior:'smooth',block:'center'});box.scrollIntoView({behavior:'smooth',block:'center'})}else if(pending.messageId){box.insertAdjacentHTML('beforeend','<p role="status">This message is not among the latest 100 messages.</p>');sessionStorage.removeItem('cc-pending-chat-target')}}}catch(err){document.getElementById('chat-messages').textContent=err.message;if(err.message.includes('being configured')){document.getElementById('chat-form').hidden=true;document.getElementById('chat-refresh').hidden=true};if(err.message.includes('database is being set up')){document.getElementById('chat-form').querySelector('button').disabled=true;document.getElementById('chat-form').querySelector('textarea').disabled=true}}};let replyTarget=null;
 const chatBox=document.getElementById('chat-messages');
 chatBox.addEventListener('click',e=>{
  const reply=e.target.closest('[data-reply-id]');
@@ -576,6 +602,57 @@ chatBox.addEventListener('click',e=>{
  const quote=e.target.closest('[data-jump-to]');
  if(quote){const target=[...chatBox.querySelectorAll('[data-chat-message]')].find(x=>x.dataset.chatMessage===quote.dataset.jumpTo);if(target){target.scrollIntoView({block:'center',behavior:'smooth'});target.style.outline='2px solid #15803d'}else alert('Original message is older than the currently loaded messages. Open chat history to find it.')}
 });
+let longPressTimer=null,longPressStart=null;
+function openMessageEditor(message){
+ const id=message.dataset.chatMessage;
+ if(!message.querySelector('[data-edit-id]'))return;
+ const bodyEl=message.querySelector('.cc-message-body');
+ const original=bodyEl?.textContent||'';
+ if(!bodyEl||message.querySelector('.cc-edit-form'))return;
+ const form=document.createElement('form');form.className='cc-edit-form';
+ form.innerHTML='<label>Edit your message<textarea maxlength="2000" required></textarea></label><button type="submit">Save</button><button type="button" class="cc-cancel-edit">Cancel</button><p role="alert"></p>';
+ const field=form.querySelector('textarea');field.value=original;
+ bodyEl.hidden=true;bodyEl.after(form);field.focus();
+ const cancel=()=>{form.remove();bodyEl.hidden=false};
+ form.querySelector('.cc-cancel-edit').onclick=cancel;
+ form.onsubmit=async event=>{event.preventDefault();try{await api('/projects/'+match[1]+'/team-messages/'+id,{method:'PATCH',body:JSON.stringify({message:field.value})});await refresh()}catch(error){form.querySelector('[role="alert"]').textContent=error.message}};
+}
+// Swipe right to reply; vertical scrolling and long-press editing remain independent.
+let replySwipe=null;
+chatBox.addEventListener('touchstart',e=>{
+ if(e.touches.length!==1||e.target.closest('button,textarea,input,select,[data-jump-to],.cc-edit-form'))return;
+ const message=e.target.closest('[data-chat-message]');
+ if(!message)return;
+ const touch=e.touches[0];
+ replySwipe={message,x:touch.clientX,y:touch.clientY,dx:0,vertical:false};
+},{passive:true});
+chatBox.addEventListener('touchmove',e=>{
+ if(!replySwipe||e.touches.length!==1)return;
+ const touch=e.touches[0],dx=touch.clientX-replySwipe.x,dy=touch.clientY-replySwipe.y;
+ if(Math.abs(dy)>12&&Math.abs(dy)>Math.abs(dx)){replySwipe.vertical=true;replySwipe.message.style.transform='';return}
+ if(!replySwipe.vertical&&dx>0&&dx>Math.abs(dy)*1.4){
+  replySwipe.dx=dx;
+  replySwipe.message.style.transition='none';
+  replySwipe.message.style.transform='translateX('+Math.min(dx,65)+'px)';
+ }
+},{passive:true});
+chatBox.addEventListener('touchend',()=>{
+ if(!replySwipe)return;
+ const gesture=replySwipe;replySwipe=null;
+ gesture.message.style.transition='transform 160ms ease';
+ gesture.message.style.transform='';
+ if(gesture.vertical||gesture.dx<55)return;
+ clearTimeout(longPressTimer);
+ const button=gesture.message.querySelector('[data-reply-id]');
+ if(button)button.click();
+},{passive:true});
+chatBox.addEventListener('touchcancel',()=>{
+ if(replySwipe){replySwipe.message.style.transform='';replySwipe=null}
+},{passive:true});
+chatBox.addEventListener('click',e=>{const button=e.target.closest('[data-edit-id]');if(button)openMessageEditor(button.closest('[data-chat-message]'))});
+chatBox.addEventListener('touchstart',e=>{const m=e.target.closest('[data-chat-message]');if(!m||!m.querySelector('[data-edit-id]')||e.target.closest('button,textarea,[data-jump-to]'))return;const t=e.touches[0];longPressStart={x:t.clientX,y:t.clientY};clearTimeout(longPressTimer);longPressTimer=setTimeout(()=>{longPressTimer=null;openMessageEditor(m)},650)},{passive:true});
+chatBox.addEventListener('touchmove',e=>{if(longPressStart&&e.touches.length){const t=e.touches[0];if(Math.hypot(t.clientX-longPressStart.x,t.clientY-longPressStart.y)>12)clearTimeout(longPressTimer)}},{passive:true});
+for(const eventName of ['touchend','touchcancel'])chatBox.addEventListener(eventName,()=>{clearTimeout(longPressTimer);longPressStart=null},{passive:true});
 chatBox.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('[data-jump-to]')){e.preventDefault();e.target.click()}});
 const presenceDots=document.getElementById('chat-presence-dots');
 const presenceCount=document.getElementById('chat-presence-count');
