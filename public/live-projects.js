@@ -86,6 +86,32 @@ document.head.appendChild(collaboSerialStyle);
 const embeddedChatStyle=document.createElement('style');
 embeddedChatStyle.textContent='.market #project-details>article #team-chat{margin:12px 0 0!important;padding:12px!important;background:#f7fbff;border:1px solid #a9cafa;border-radius:10px}.market #project-details>article #team-chat h3{margin:0 0 7px!important;color:#1557a0}.market #project-details>article #chat-messages{max-height:210px!important;overflow-y:auto;padding:5px 0}.market #project-details>article #chat-messages p{margin:4px 0!important;padding:6px 8px;background:white;border-radius:7px}.market #project-details>article #chat-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin:7px 0}.market #project-details>article #chat-form label{flex:1 1 260px;margin:0}.market #project-details>article #chat-form textarea{min-height:48px;height:54px;margin:4px 0}.market #project-details>article #chat-form button{margin:0}.market #project-details>article #chat-presence-dots{margin:6px 0!important}';
 document.head.appendChild(embeddedChatStyle);
+// High-contrast dark theme scoped exclusively to the Collabo group chat.
+const darkTeamChatStyle=document.createElement('style');
+darkTeamChatStyle.textContent=`
+.market #project-details>article #team-chat{background:#080808!important;color:#fff!important;border:1px solid #444!important;color-scheme:dark}
+.market #project-details>article #team-chat h3,
+.market #project-details>article #team-chat p,
+.market #project-details>article #team-chat label,
+.market #project-details>article #team-chat strong,
+.market #project-details>article #team-chat small,
+.market #project-details>article #chat-presence-count{color:#fff!important}
+.market #project-details>article #chat-messages{background:#080808!important;color:#fff!important}
+.market #project-details>article #chat-messages [data-chat-message]{background:#191919!important;color:#fff!important;border:1px solid #383838!important}
+.market #project-details>article #chat-messages [data-chat-message] strong,
+.market #project-details>article #chat-messages [data-chat-message] small{color:#fff!important}
+.market #project-details>article #team-chat textarea{background:#181818!important;color:#fff!important;border:1px solid #888!important}
+.market #project-details>article #team-chat textarea::placeholder{color:#bbb!important}
+.market #project-details>article #team-chat button{background:#282828;color:#fff;border:1px solid #777}
+.market #project-details>article #team-chat button.primary{background:#16803b!important;color:#fff!important;border-color:#16803b!important}
+.market #project-details>article #team-chat .cc-reply-quote{background:#292929!important;color:#fff!important;border-left-color:#22c55e!important}
+.market #project-details>article #team-chat #chat-reply-preview{background:#1d3024!important;color:#fff!important}
+.market #project-details>article #team-chat .cc-edit-form{background:#262626!important;color:#fff!important}
+.market #project-details>article #team-chat .cc-edited-label{background:#fde047!important;color:#422006!important}
+.market #project-details>article #team-chat [data-chat-message][style*="outline"]{outline-color:#22c55e!important}
+`;
+document.head.appendChild(darkTeamChatStyle);
+
 const compactProjectChatStyle=document.createElement('style');
 compactProjectChatStyle.textContent=`
 /* Recover whitespace in project details and group chat without hiding content. */
