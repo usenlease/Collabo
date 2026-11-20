@@ -89,27 +89,27 @@ document.head.appendChild(embeddedChatStyle);
 // High-contrast dark theme scoped exclusively to the Collabo group chat.
 const darkTeamChatStyle=document.createElement('style');
 darkTeamChatStyle.textContent=`
-.market #project-details>article #team-chat{background:#e5eee5!important;color:#173d2b!important;border:1px solid #b5cbb9!important;color-scheme:light}
+.market #project-details>article #team-chat{background:#101c30!important;color:#fff!important;border:1px solid #415572!important;color-scheme:dark}
 .market #project-details>article #team-chat h3,
 .market #project-details>article #team-chat p,
 .market #project-details>article #team-chat label,
 .market #project-details>article #team-chat strong,
 .market #project-details>article #team-chat small,
-.market #project-details>article #chat-presence-count{color:#173d2b!important}
-.market #project-details>article #chat-messages{background:#e5eee5!important;color:#173d2b!important}
-.market #project-details>article #chat-messages [data-chat-message]{background:#d1e3d4!important;color:#173d2b!important;border:1px solid #b5cbb9!important}
+.market #project-details>article #chat-presence-count{color:#fff!important}
+.market #project-details>article #chat-messages{background:#101c30!important;color:#fff!important}
+.market #project-details>article #chat-messages [data-chat-message]{background:#20334b!important;color:#fff!important;border:1px solid #3b506c!important}
 .market #project-details>article #chat-messages [data-chat-message] strong,
-.market #project-details>article #chat-messages [data-chat-message] small{color:#173d2b!important}
-.market #project-details>article #team-chat textarea{background:#fff!important;color:#173d2b!important;border:1px solid #91ae9a!important}
-.market #project-details>article #team-chat textarea::placeholder{color:#627b6b!important}
-.market #project-details>article #team-chat button{background:#e0e9df!important;color:#173d2b!important;border:1px solid #9db9a4!important}
+.market #project-details>article #chat-messages [data-chat-message] small{color:#fff!important}
+.market #project-details>article #team-chat textarea{background:#17263c!important;color:#fff!important;border:1px solid #8497b0!important}
+.market #project-details>article #team-chat textarea::placeholder{color:#bbb!important}
+.market #project-details>article #team-chat button{background:#29405a;color:#fff;border:1px solid #777}
 .market #project-details>article #team-chat button.primary{background:#16803b!important;color:#fff!important;border-color:#16803b!important}
-.market #project-details>article #team-chat .cc-reply-quote{background:#bfd9c5!important;color:#173d2b!important;border-left-color:#16803b!important}
-.market #project-details>article #team-chat #chat-reply-preview{background:#d1e3d4!important;color:#173d2b!important}
-.market #project-details>article #team-chat .cc-edit-form{background:#f0f5eb!important;color:#173d2b!important}
+.market #project-details>article #team-chat .cc-reply-quote{background:#2a415e!important;color:#fff!important;border-left-color:#22c55e!important}
+.market #project-details>article #team-chat #chat-reply-preview{background:#1a3b37!important;color:#fff!important}
+.market #project-details>article #team-chat .cc-edit-form{background:#253b54!important;color:#fff!important}
 .market #project-details>article #team-chat .cc-edited-label{background:#fde047!important;color:#422006!important}
-.market #project-details>article #team-chat [data-chat-message][style*="outline"]{outline-color:#16803b!important}
-``;
+.market #project-details>article #team-chat [data-chat-message][style*="outline"]{outline-color:#22c55e!important}
+`;
 document.head.appendChild(darkTeamChatStyle);
 
 const compactProjectChatStyle=document.createElement('style');
