@@ -596,7 +596,7 @@ export default {
     const owner=p.owner_clerk_id===user;
     const ready=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('role_applications','project_needs')").all();
     if(ready.results.length<2)return json({applications:[],is_owner:owner,applications_available:false});
-    const rows=await env.DB.prepare("SELECT a.id,a.need_id,n.item_name,a.applicant_clerk_id,a.experience,a.offered_quantity,a.rate_amount,a.currency,a.rate_period,a.message,a.status,a.created_at FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=? AND (a.applicant_clerk_id=? OR ?=1) ORDER BY a.created_at DESC").bind(rolesRoute[1],user,owner?1:0).all();
+    const rows=await env.DB.prepare("SELECT a.id,a.need_id,n.item_name,a.applicant_clerk_id,a.experience,a.offered_quantity,a.rate_amount,a.currency,a.rate_period,a.message,a.status,a.created_at FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=? AND (?=1 OR (a.applicant_clerk_id=? AND a.status='approved')) ORDER BY a.created_at DESC").bind(rolesRoute[1],owner?1:0,user).all();
     return json({applications:rows.results,is_owner:owner});
    }
    const decision=/^\/api\/projects\/([a-f0-9-]{36})\/role-applications\/([a-f0-9-]{36})$/.exec(url.pathname);
