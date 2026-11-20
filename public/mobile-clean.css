@@ -131,3 +131,6 @@ header [data-signout]{font-size:clamp(15px,1.15vw,18px)!important;font-weight:80
 .cl-signUp-root .cl-formFieldHintText,
 .cl-signUp-root .cl-formFieldErrorText,
 .cl-signUp-root .cl-dividerText{font-size:15px!important;line-height:1.4!important}
+
+/* Make Collaborators / items wanted and Collaborators / resources wanted headings 15% larger. */
+.collabo-wanted-heading{font-size:1.15em!important;font-weight:800!important;line-height:1.35!important}
