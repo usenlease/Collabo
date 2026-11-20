@@ -22,17 +22,15 @@
  const toast=document.createElement('div');toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');toast.style.cssText='position:fixed;right:16px;top:90px;z-index:9999;max-width:min(350px,90vw);pointer-events:none';document.body.appendChild(toast);
  function navigateToNotification(n){
   const target=String(n.link||'');
-  const match=/^#project\/([a-f0-9-]{36})(\/chat)?$/.exec(target);
-  if(!match)return;
+  const match=/^#project\/([a-f0-9-]{36})(?:\/chat(?:\/([a-f0-9-]{36}))?)?$/.exec(target);
+  if(!match){if(target.startsWith('#'))location.hash=target;return}
   const hash='#project/'+match[1];
+  if(match[2]!==undefined){
+   sessionStorage.setItem('cc-pending-chat-target',JSON.stringify({projectId:match[1],messageId:match[2]||null}));
+  }
+  closePanel();
   if(location.hash!==hash)location.hash=hash;
-  let tries=0;
-  const focus=()=>{
-   const el=match[2]?(document.getElementById('collabo-team-chat')||document.querySelector('[data-team-chat]')||document.querySelector('.collabo-group-chat')):document.getElementById('applications');
-   if(el){el.scrollIntoView({behavior:'smooth',block:'center'});return}
-   if(++tries<40)setTimeout(focus,200);
-  };
-  setTimeout(focus,120);
+  else window.dispatchEvent(new Event('hashchange'));
  }
  function showToast(n){const el=document.createElement('div');el.style.cssText='background:#fff8d8;border:2px solid #d3a700;border-radius:12px;padding:12px;margin-bottom:8px;box-shadow:0 8px 24px #0002;color:#263322;pointer-events:auto';const title=document.createElement('strong');title.textContent=n.title;const msg=document.createElement('div');msg.textContent=n.message;const link=document.createElement('button');link.type='button';link.textContent='View application';link.style.cssText='display:block;margin-top:8px;padding:6px 10px;background:#166534;color:white;border:0;border-radius:7px';link.onclick=()=>{navigateToNotification(n);el.remove()};el.append(title,msg,link);toast.prepend(el);setTimeout(()=>el.remove(),9000)}
  async function request(path,options){
