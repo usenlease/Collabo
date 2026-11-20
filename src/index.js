@@ -106,7 +106,7 @@ export default {
   if(url.pathname==='/api/health'&&request.method==='GET') return json({status:'ok'});
   // Public, read-only discovery. Never expose owner identifiers or private applications.
   if(request.method==='GET' && url.pathname==='/api/public/projects'){
-    try {await ensureCollaboSerials(env.DB);const rows=await env.DB.prepare("SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.status,p.created_at,s.serial,s.posting_country FROM projects p JOIN collabo_serials s ON s.project_id=p.id WHERE p.status='open' ORDER BY p.created_at DESC LIMIT 100").all();return json({projects:rows.results.map(p=>({...p,collabo_number:collaboNumber(p.serial,p.posting_country,p.location),serial:undefined,posting_country:undefined}))})}
+    try {await ensureCollaboSerials(env.DB);const rows=await env.DB.prepare("SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.status,p.created_at,s.serial,s.posting_country FROM projects p JOIN collabo_serials s ON s.project_id=p.id WHERE p.status='open' ORDER BY s.serial ASC LIMIT 100").all();return json({projects:rows.results.map(p=>({...p,collabo_number:collaboNumber(p.serial,p.posting_country,p.location),serial:undefined,posting_country:undefined}))})}
     catch{return json({error:'Projects temporarily unavailable'},503)}
   }
   const publicDetail=/^\/api\/public\/projects\/([a-f0-9-]{36})$/.exec(url.pathname);
@@ -416,7 +416,7 @@ export default {
    }
    if(url.pathname==='/api/projects'&&request.method==='GET'){
     await ensureCollaboSerials(env.DB);
-    const rows=await env.DB.prepare("SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.status,p.created_at,s.serial,s.posting_country,CASE WHEN p.owner_clerk_id=? THEN 1 ELSE 0 END AS is_owner FROM projects p JOIN collabo_serials s ON s.project_id=p.id WHERE p.status='open' ORDER BY p.created_at DESC LIMIT 100").bind(user).all();
+    const rows=await env.DB.prepare("SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.status,p.created_at,s.serial,s.posting_country,CASE WHEN p.owner_clerk_id=? THEN 1 ELSE 0 END AS is_owner FROM projects p JOIN collabo_serials s ON s.project_id=p.id WHERE p.status='open' ORDER BY s.serial ASC LIMIT 100").bind(user).all();
     return json({projects:rows.results.map(p=>({...p,collabo_number:collaboNumber(p.serial,p.posting_country,p.location)}))});
    }
    if(url.pathname==='/api/projects'&&request.method==='POST'){
