@@ -87,3 +87,25 @@
  .market .role-banner.initiator,.market .role-banner.collaborator{padding:9px!important;gap:6px!important}
  .market .initiator-history-button,.market .collaborator-history-button{max-width:40%!important;padding:7px 5px!important}
 }
+
+/* Readability upgrade: ~30% larger, stronger account controls and navigation.
+   Retains Cloud Collabo corporate colors, labels and mobile layout. */
+header #language,
+header .controls select{font-size:clamp(14px,1.1vw,17px)!important;font-weight:700!important;line-height:1.3!important}
+header .controls button,
+header #sign,
+header #signout,
+header #account,
+header [data-account],
+header [data-signout]{font-size:clamp(15px,1.15vw,18px)!important;font-weight:800!important;line-height:1.3!important}
+.market nav button{font-size:clamp(16px,1.25vw,19px)!important;font-weight:800!important;line-height:1.3!important;letter-spacing:0!important}
+@media(max-width:650px){
+ header{flex-wrap:wrap!important;height:auto!important;min-height:0!important;justify-content:center!important;row-gap:9px!important}
+ header .controls{flex-wrap:wrap!important;justify-content:center!important;gap:8px!important;max-width:100%!important}
+ header #language{width:auto!important;max-width:none!important;min-width:92px!important;padding:9px 7px!important}
+ header #sign{min-width:0!important;padding:9px 11px!important}
+ header .controls button{padding:9px 11px!important}
+ .market nav{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;padding:10px!important}
+ .market nav button{font-size:clamp(15px,3.8vw,18px)!important;padding:12px 8px!important;min-height:46px!important;white-space:normal!important}
+ .market nav button[data-route="post"]{grid-column:1/-1!important}
+}
