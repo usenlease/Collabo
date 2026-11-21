@@ -635,6 +635,53 @@ export default {
     try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),a.applicant_clerk_id,b.status==='approved'?'Application approved':'Application rejected','Your application for '+a.item_name+(b.status==='approved'?' has been approved. You can now join the Collabo Group Chat.':' was not approved.'),'#project/'+decision[1]).run();}catch(e){console.error('Decision notification failed',e)}
     return json({updated:true,status:b.status});
    }
+   // Project participation exit workflow. All changes are recorded; team chat remains immutable.
+   const exits=/^\/api\/projects\/([a-f0-9-]{36})\/collaborator-exits(?:\/([a-f0-9-]{36}))?$/.exec(url.pathname);
+   if(exits&&['GET','POST','PATCH'].includes(request.method)){
+    const project=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(exits[1]).first();
+    if(!project)return json({error:'Collabo not found'},404);
+    const isOwner=project.owner_clerk_id===user;
+    const exists=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='collabo_collaborator_exits'").first();
+    if(!exists)return json({error:'Apply collaborator exit database migration first',code:'EXIT_MIGRATION_REQUIRED'},503);
+    if(request.method==='GET'){
+     const member=await env.DB.prepare("SELECT 1 FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(exits[1],user).first();
+     if(!isOwner&&!member)return json({error:'Only current project participants may view departure history'},403);
+     const rows=await env.DB.prepare('SELECT id,applicant_clerk_id,request_type,status,reason,initiator_note,created_at,resolved_at FROM collabo_collaborator_exits WHERE project_id=? ORDER BY created_at DESC LIMIT 100').bind(exits[1]).all();
+     return json({exits:rows.results.map(x=>isOwner||x.applicant_clerk_id===user?x:{id:x.id,request_type:x.request_type,status:x.status,created_at:x.created_at,resolved_at:x.resolved_at}),is_owner:isOwner});
+    }
+    if(request.method==='POST'&&!exits[2]){
+     const b=await body(request);
+     if(!['withdrawal','termination'].includes(b?.request_type))return json({error:'Invalid request type'},400);
+     const reason=String(b.reason||'').trim();
+     if(reason.length<10||reason.length>2000)return json({error:'Provide a reason (10–2000 characters)'},400);
+     const target=b.request_type==='withdrawal'?user:String(b.applicant_clerk_id||'');
+     if(b.request_type==='termination'&&(!isOwner||!target||target===user))return json({error:'Only the initiator may request termination of another collaborator'},403);
+     const active=await env.DB.prepare("SELECT id FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(exits[1],target).first();
+     if(!active)return json({error:'Collaborator is not currently approved'},409);
+     const pending=await env.DB.prepare("SELECT id FROM collabo_collaborator_exits WHERE project_id=? AND applicant_clerk_id=? AND status='pending' LIMIT 1").bind(exits[1],target).first();
+     if(pending)return json({error:'A departure request is already pending'},409);
+     const id=crypto.randomUUID();
+     await env.DB.prepare("INSERT INTO collabo_collaborator_exits(id,project_id,applicant_clerk_id,requested_by,request_type,status,reason) VALUES(?,?,?,?,?,'pending',?)").bind(id,exits[1],target,user,b.request_type,reason).run();
+     return json({id,status:'pending',review_required:true},201);
+    }
+    if(request.method==='PATCH'&&exits[2]){
+     if(!isOwner)return json({error:'Only the initiator can review a departure request'},403);
+     const b=await body(request);
+     if(!['approve','decline'].includes(b?.decision))return json({error:'Invalid decision'},400);
+     const note=String(b.note||'').trim();
+     if(note.length>2000)return json({error:'Review note too long'},400);
+     const exit=await env.DB.prepare("SELECT applicant_clerk_id,status FROM collabo_collaborator_exits WHERE id=? AND project_id=?").bind(exits[2],exits[1]).first();
+     if(!exit||exit.status!=='pending')return json({error:'Request no longer pending'},409);
+     const next=b.decision==='approve'?'completed':'declined';
+     // Update only after the participant's status has been changed. D1 batch is atomic.
+     const statements=[];
+     if(next==='completed')statements.push(env.DB.prepare("UPDATE role_applications SET status='withdrawn',updated_at=datetime('now') WHERE project_id=? AND applicant_clerk_id=? AND status='approved'").bind(exits[1],exit.applicant_clerk_id));
+     statements.push(env.DB.prepare("UPDATE collabo_collaborator_exits SET status=?,initiator_note=?,resolved_at=datetime('now'),resolved_by=? WHERE id=? AND project_id=? AND status='pending'").bind(next,note,user,exits[2],exits[1]));
+     await env.DB.batch(statements);
+     return json({status:next,access_revoked:next==='completed'});
+    }
+    return json({error:'Unsupported departure action'},405);
+   }
    const presence=/^\/api\/projects\/([a-f0-9-]{36})\/team-presence$/.exec(url.pathname);
    if(presence&&(request.method==='GET'||request.method==='POST')){
     const project=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(presence[1]).first();
