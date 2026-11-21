@@ -630,7 +630,11 @@ export default {
      const filled=await env.DB.prepare("SELECT COALESCE(SUM(offered_quantity),0) AS total FROM role_applications WHERE need_id=? AND status='approved'").bind(a.need_id).first();
      if(filled.total+a.offered_quantity>a.quantity)return json({error:'Not enough remaining positions or items'},409);
     }
-    const result=await env.DB.prepare("UPDATE role_applications SET status=?,updated_at=datetime('now') WHERE id=? AND status='pending'").bind(b.status,a.id).run();
+    const approvalCols=new Set((await env.DB.prepare('PRAGMA table_info(role_applications)').all()).results.map(c=>c.name));
+    if(b.status==='approved'&&!approvalCols.has('approved_at'))return json({error:'Chat privacy upgrade required before approving new collaborators',code:'CHAT_PRIVACY_MIGRATION_REQUIRED'},503);
+    const result=b.status==='approved'
+     ?await env.DB.prepare("UPDATE role_applications SET status=?,approved_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='pending'").bind(b.status,a.id).run()
+     :await env.DB.prepare("UPDATE role_applications SET status=?,updated_at=datetime('now') WHERE id=? AND status='pending'").bind(b.status,a.id).run();
     if(!result.meta.changes)return json({error:'Application already decided'},409);
     try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),a.applicant_clerk_id,b.status==='approved'?'Application approved':'Application rejected','Your application for '+a.item_name+(b.status==='approved'?' has been approved. You can now join the Collabo Group Chat.':' was not approved.'),'#project/'+decision[1]).run();}catch(e){console.error('Decision notification failed',e)}
     return json({updated:true,status:b.status});
@@ -734,9 +738,12 @@ export default {
     if(p.owner_clerk_id!==user){
      const roleTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='role_applications'").first();
      if(!roleTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
-     const member=await env.DB.prepare("SELECT id FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(chat[1],user).first();
-     if(!member)return json({error:'Only approved collaborators can enter team chat'},403);
+     const privacyCols=new Set((await env.DB.prepare('PRAGMA table_info(role_applications)').all()).results.map(c=>c.name));
+     if(!privacyCols.has('approved_at'))return json({error:'Chat privacy upgrade required',code:'CHAT_PRIVACY_MIGRATION_REQUIRED'},503);
+     const member=await env.DB.prepare("SELECT MIN(approved_at) AS joined_at FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved'").bind(chat[1],user).first();
+     if(!member?.joined_at)return json({error:'Only approved collaborators can enter team chat'},403);
     }
+    const joinedAt=p.owner_clerk_id===user?'1970-01-01 00:00:00':(await env.DB.prepare("SELECT MIN(approved_at) AS joined_at FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved'").bind(chat[1],user).first())?.joined_at;
     const chatTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_team_messages'").first();
     if(!chatTable)return json({error:'Team chat is temporarily unavailable while the database is being set up',code:'CHAT_SETUP_REQUIRED'},503);
     // Production D1 databases may not yet have the reply/edit columns.
@@ -744,7 +751,7 @@ export default {
     const hasReply=chatColumns.has('reply_to_id'),hasEdited=chatColumns.has('edited_at');
     if(request.method==='GET'){
      const first=url.searchParams.get('first')==='1';
-     const rows=await env.DB.prepare(`SELECT m.id,m.sender_clerk_id,m.body,m.created_at,${hasEdited?'m.edited_at':'NULL AS edited_at'},(m.sender_clerk_id=? AND m.id=(SELECT recent.id FROM project_team_messages recent WHERE recent.project_id=m.project_id AND recent.sender_clerk_id=m.sender_clerk_id ORDER BY recent.created_at DESC,recent.id DESC LIMIT 1)) AS can_edit,${hasReply?'m.reply_to_id, parent.body AS reply_body,parent.sender_clerk_id AS reply_sender_clerk_id':'NULL AS reply_to_id,NULL AS reply_body,NULL AS reply_sender_clerk_id'},CASE WHEN m.sender_clerk_id=? THEN 'Initiator' ELSE COALESCE((SELECT GROUP_CONCAT(role_name, ', ') FROM (SELECT DISTINCT n.item_name AS role_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=m.project_id AND a.applicant_clerk_id=m.sender_clerk_id AND a.status='approved' ORDER BY n.item_name)), 'Collaborator') END AS sender_role FROM project_team_messages m ${hasReply?'LEFT JOIN project_team_messages parent ON parent.id=m.reply_to_id AND parent.project_id=m.project_id':''} WHERE m.project_id=? ORDER BY m.created_at ${first?'ASC':'DESC'},m.id ${first?'ASC':'DESC'} LIMIT 100`).bind(user,p.owner_clerk_id,chat[1]).all();
+     const rows=await env.DB.prepare(`SELECT m.id,m.sender_clerk_id,m.body,m.created_at,${hasEdited?'m.edited_at':'NULL AS edited_at'},(m.sender_clerk_id=? AND m.id=(SELECT recent.id FROM project_team_messages recent WHERE recent.project_id=m.project_id AND recent.sender_clerk_id=m.sender_clerk_id ORDER BY recent.created_at DESC,recent.id DESC LIMIT 1)) AS can_edit,${hasReply?'m.reply_to_id, parent.body AS reply_body,parent.sender_clerk_id AS reply_sender_clerk_id':'NULL AS reply_to_id,NULL AS reply_body,NULL AS reply_sender_clerk_id'},CASE WHEN m.sender_clerk_id=? THEN 'Initiator' ELSE COALESCE((SELECT GROUP_CONCAT(role_name, ', ') FROM (SELECT DISTINCT n.item_name AS role_name FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.project_id=m.project_id AND a.applicant_clerk_id=m.sender_clerk_id AND a.status='approved' ORDER BY n.item_name)), 'Collaborator') END AS sender_role FROM project_team_messages m ${hasReply?'LEFT JOIN project_team_messages parent ON parent.id=m.reply_to_id AND parent.project_id=m.project_id':''} WHERE m.project_id=? AND datetime(m.created_at)>=datetime(?) ORDER BY m.created_at ${first?'ASC':'DESC'},m.id ${first?'ASC':'DESC'} LIMIT 100`).bind(user,p.owner_clerk_id,chat[1],joinedAt).all();
      // Resolve sender names from verified Clerk profiles; never expose Clerk user IDs in the UI.
      const messages=first?rows.results:rows.results.reverse();
      const senderIds=[...new Set(messages.flatMap(m=>[m.sender_clerk_id,m.reply_sender_clerk_id]).filter(Boolean))];
@@ -768,7 +775,7 @@ export default {
     const replyToId=b.reply_to_id||null;
     if(replyToId){
      if(typeof replyToId!=='string'||!/^[a-f0-9-]{36}$/.test(replyToId))return json({error:'Invalid reply target'},400);
-     const parent=await env.DB.prepare('SELECT id FROM project_team_messages WHERE id=? AND project_id=?').bind(replyToId,chat[1]).first();
+     const parent=await env.DB.prepare('SELECT id FROM project_team_messages WHERE id=? AND project_id=? AND datetime(created_at)>=datetime(?)').bind(replyToId,chat[1],joinedAt).first();
      if(!parent)return json({error:'Original message was not found in this Collabo'},404);
     }
     const messageId=crypto.randomUUID();
