@@ -681,7 +681,22 @@ export default {
      const member=await env.DB.prepare("SELECT 1 FROM role_applications WHERE project_id=? AND applicant_clerk_id=? AND status='approved' LIMIT 1").bind(exits[1],user).first();
      if(!isOwner&&!member)return json({error:'Only current project participants may view departure history'},403);
      const rows=await env.DB.prepare('SELECT e.id,e.applicant_clerk_id,e.application_id,n.item_name AS role_title,e.request_type,e.status,e.reason,e.initiator_note,e.created_at,e.resolved_at FROM collabo_collaborator_exits e LEFT JOIN role_applications a ON a.id=e.application_id AND a.project_id=e.project_id LEFT JOIN project_needs n ON n.id=a.need_id WHERE e.project_id=? ORDER BY e.created_at DESC LIMIT 100').bind(exits[1]).all();
-     return json({exits:rows.results.map(x=>isOwner||x.applicant_clerk_id===user?x:{id:x.id,request_type:x.request_type,status:x.status,created_at:x.created_at,resolved_at:x.resolved_at}),is_owner:isOwner});
+     const names={};
+     if(isOwner&&env.CLERK_SECRET_KEY){
+      const participants=await env.DB.prepare("SELECT DISTINCT applicant_clerk_id FROM role_applications WHERE project_id=? AND status='approved'").bind(exits[1]).all();
+      await Promise.all((participants.results||[]).map(async a=>{
+       const id=a.applicant_clerk_id;
+       try{
+        const response=await fetch('https://api.clerk.com/v1/users/'+encodeURIComponent(id),{headers:{Authorization:'Bearer '+env.CLERK_SECRET_KEY}});
+        if(response.ok){
+         const profile=await response.json();
+         const full=[profile.first_name,profile.last_name].filter(Boolean).join(' ').trim();
+         names[id]=full||profile.username||'';
+        }
+       }catch(err){console.error('Collaborator name lookup failed',err)}
+      }));
+     }
+     return json({exits:rows.results.map(x=>isOwner||x.applicant_clerk_id===user?x:{id:x.id,request_type:x.request_type,status:x.status,created_at:x.created_at,resolved_at:x.resolved_at}),is_owner:isOwner,collaborator_names:names});
     }
     if(request.method==='POST'&&!exits[2]){
      const b=await body(request);
