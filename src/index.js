@@ -628,7 +628,10 @@ export default {
     if(!a||a.status!=='pending')return json({error:'Application is not pending'},409);
     if(b.status==='approved'){
      const filled=await env.DB.prepare("SELECT COALESCE(SUM(offered_quantity),0) AS total FROM role_applications WHERE need_id=? AND status='approved'").bind(a.need_id).first();
-     if(filled.total+a.offered_quantity>a.quantity)return json({error:'Not enough remaining positions or items'},409);
+     if(Number(filled.total)+Number(a.offered_quantity)>Number(a.quantity)){
+      const requested=Number(a.quantity),approved=Number(filled.total),applicant=Number(a.offered_quantity),remaining=Math.max(0,requested-approved);
+      return json({error:'Cannot approve '+a.item_name+'. This Collabo needs '+requested+' position(s)/item(s); '+approved+' are already approved, leaving '+remaining+' available. This application offers '+applicant+'. No approval was made. Review the approved applications or adjust the role quantity if the project genuinely needs more.',code:'ROLE_CAPACITY_EXCEEDED',role:a.item_name,required_quantity:requested,approved_quantity:approved,remaining_quantity:remaining,application_quantity:applicant,approved:false},409);
+     }
     }
     const approvalCols=new Set((await env.DB.prepare('PRAGMA table_info(role_applications)').all()).results.map(c=>c.name));
     if(b.status==='approved'&&!approvalCols.has('approved_at'))return json({error:'Chat privacy upgrade required before approving new collaborators',code:'CHAT_PRIVACY_MIGRATION_REQUIRED'},503);
