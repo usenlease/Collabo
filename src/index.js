@@ -191,7 +191,19 @@ export default {
      const approved=new Set(apps.filter(x=>x.status==='approved').map(x=>x.project_id));
      const count={total:all.length,completed:all.filter(x=>x.status==='closed').length,paused:all.filter(x=>x.status==='paused').length,ongoing:all.filter(x=>approved.has(x.id)&&x.status==='open').length,no_collaborators:all.filter(x=>!approved.has(x.id)).length};
      const locations={};for(const p of all){const place=(p.location||'Unspecified').split(',').map(x=>x.trim()).filter(Boolean).pop()||'Unspecified';locations[place]=(locations[place]||0)+1}
-     return json({admin_level:adminLevel,member_counts:{known_unique_members:joined.size,initiators:new Set(all.map(x=>x.owner_clerk_id)).size,applicants:new Set(apps.map(x=>x.applicant_clerk_id)).size,note:'Counts include participants recorded in projects and applications; not all Clerk registrations.'},members:[...joined].slice(0,500).map(id=>({id,initiator:all.some(p=>p.owner_clerk_id===id),collaborator:apps.some(a=>a.applicant_clerk_id===id)})),collabos:all.map(p=>({...p,moderation_action:moderationByProject.get(p.id)?.action||null,moderation_reason:moderationByProject.get(p.id)?.reason||null,approved_collaborators:apps.filter(a=>a.project_id===p.id&&a.status==='approved').length,applications:apps.filter(a=>a.project_id===p.id).length})),count,locations:Object.entries(locations).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count})),finances:{collected:null,transacted:null,note:'No verified platform payment ledger is connected. Project estimates are not revenue.'},email:{enabled:false,note:'Bulk email requires a configured provider, consent controls, and delivery logs.'}});
+     const directory=new Map();let directoryComplete=false;
+     try {
+      for(let offset=0;offset<100000;offset+=100){
+       const response=await fetch('https://api.clerk.com/v1/users?limit=100&offset='+offset,{headers:{Authorization:'Bearer '+env.CLERK_SECRET_KEY}});
+       if(!response.ok)throw Error('Directory unavailable');
+       const page=await response.json();const users=Array.isArray(page)?page:page.data;
+       if(!Array.isArray(users))throw Error('Invalid directory response');
+       for(const profile of users){const email=(profile.email_addresses||[]).find(e=>e.id===profile.primary_email_address_id);directory.set(profile.id,{name:[profile.first_name,profile.last_name].filter(Boolean).join(' ')||profile.username||'Name unavailable',email:email?.email_address||'Email unavailable'});}
+       if(users.length<100){directoryComplete=true;break;}
+      }
+     }catch(e){console.error('Admin directory unavailable',e);}
+     const memberIds=new Set([...directory.keys(),...joined]);
+     return json({admin_level:adminLevel,member_counts:{registered_total:directoryComplete?directory.size:null,known_unique_members:memberIds.size,initiators:new Set(all.map(x=>x.owner_clerk_id)).size,applicants:new Set(apps.map(x=>x.applicant_clerk_id)).size,note:directoryComplete?'Registered accounts from Clerk, plus historical project participants.':'Clerk directory incomplete or unavailable; registered total cannot be verified.'},members:[...memberIds].map(id=>({name:directory.get(id)?.name||'Name unavailable',email:directory.get(id)?.email||'Email unavailable',initiator:all.some(p=>p.owner_clerk_id===id),collaborator:apps.some(a=>a.applicant_clerk_id===id)})),collabos:all.map(p=>({...p,moderation_action:moderationByProject.get(p.id)?.action||null,moderation_reason:moderationByProject.get(p.id)?.reason||null,approved_collaborators:apps.filter(a=>a.project_id===p.id&&a.status==='approved').length,applications:apps.filter(a=>a.project_id===p.id).length})),count,locations:Object.entries(locations).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count})),finances:{collected:null,transacted:null,note:'No verified platform payment ledger is connected. Project estimates are not revenue.'},email:{enabled:false,note:'Bulk email requires a configured provider, consent controls, and delivery logs.'}});
     }
     return json({error:'Admin endpoint unavailable'},404);
    }
