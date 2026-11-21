@@ -556,6 +556,33 @@ async function refreshExits(){
  }catch(err){exitHost.innerHTML='<h3>Collaborator departures & replacements</h3><p>Departure management requires the database migration. '+esc(err.message)+'</p>'}
 }
 refreshExits();
+if(p.is_owner){
+ const initiatorPanel=document.createElement('section');
+ initiatorPanel.id='initiator-exit-handover';
+ initiatorPanel.className='notice';
+ exitHost.insertAdjacentElement('beforebegin',initiatorPanel);
+ async function loadInitiatorExits(){
+  try{
+   const data=await api('/projects/'+match[1]+'/initiator-exit');
+   const requests=data.requests||[];
+   initiatorPanel.innerHTML='<h3>Initiator Exit & Project Handover</h3><p>As the initiator, you may request a leadership transfer, project pause, or closure. Existing commitments remain in effect until formally resolved.</p>'+
+    '<form id="initiator-exit-form"><label>How should this Collabo continue?<select name="exit_option" required><option value="transfer">Transfer leadership</option><option value="pause">Pause the Collabo</option><option value="close">Request project closure</option></select></label>'+
+    '<label id="initiator-successor-label">Proposed successor (must accept before transfer)<input name="proposed_successor" maxlength="200" placeholder="Approved collaborator name or account ID" required></label>'+
+    '<label>Reason for leaving<textarea name="reason" minlength="10" maxlength="2000" required></textarea></label>'+
+    '<label>Outstanding work, payments, agreements and obligations<textarea name="obligations" minlength="5" maxlength="3000" required></textarea></label>'+
+    '<label><input type="checkbox" name="acknowledge" required> I understand this request does not cancel existing obligations or immediately transfer ownership.</label>'+
+    '<button type="submit">Submit initiator exit request</button></form><p id="initiator-exit-status" role="status"></p>'+
+    '<h4>Initiator exit requests</h4>'+requests.map(x=>'<article><strong>'+esc(x.exit_option)+' — '+esc(x.status)+'</strong><small> '+esc(x.created_at)+'</small><p>'+esc(x.reason)+'</p></article>').join('');
+   const form=initiatorPanel.querySelector('#initiator-exit-form');
+   const option=form.elements.exit_option,successor=form.elements.proposed_successor;
+   option.onchange=()=>{const transfer=option.value==='transfer';initiatorPanel.querySelector('#initiator-successor-label').hidden=!transfer;successor.required=transfer;};
+   option.onchange();
+   if(requests.some(x=>x.status==='pending')){form.querySelector('button[type=submit]').disabled=true;initiatorPanel.querySelector('#initiator-exit-status').textContent='An initiator exit request is pending review.';}
+   form.onsubmit=async e=>{e.preventDefault();const f=new FormData(form),out=initiatorPanel.querySelector('#initiator-exit-status');try{const result=await api('/projects/'+match[1]+'/initiator-exit',{method:'POST',body:JSON.stringify({exit_option:f.get('exit_option'),proposed_successor:f.get('proposed_successor'),reason:f.get('reason'),obligations:f.get('obligations'),acknowledge:f.has('acknowledge')})});out.textContent=result.message;await loadInitiatorExits()}catch(err){out.textContent=err.message}};
+  }catch(err){initiatorPanel.innerHTML='<h3>Initiator Exit & Project Handover</h3><p>'+esc(err.message)+'</p>';}
+ }
+ loadInitiatorExits();
+}
 if(p.is_owner){const host=document.getElementById('applications');host.innerHTML=apps.map(a=>'<article data-application-status="'+esc(a.status)+'"><div class="application-title"><strong>'+esc(a.item_name)+'</strong><span class="application-status" data-status="'+esc(a.status)+'">'+esc(a.status==='declined'?'Rejected':a.status)+'</span></div><p><strong>Experience:</strong> '+esc(a.experience)+'</p><p><strong>Quantity:</strong> '+a.offered_quantity+' · <strong>Rate:</strong> '+esc(a.currency)+' '+a.rate_amount+' per '+esc(a.rate_period)+'</p>'+(a.message?'<p><strong>Message:</strong> '+esc(a.message)+'</p>':'')+(a.status==='pending'?'<button data-decision="approved" data-app="'+esc(a.id)+'">Approve</button> <button data-decision="declined" data-app="'+esc(a.id)+'">Decline</button>':'')+'</article>').join('')||'<p>No applications yet.</p>';host.querySelectorAll('[data-decision]').forEach(btn=>btn.onclick=async()=>{
  const action=btn.dataset.decision;
  const card=btn.closest('article');
