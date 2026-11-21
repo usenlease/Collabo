@@ -639,6 +639,33 @@ export default {
     try{await env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),a.applicant_clerk_id,b.status==='approved'?'Application approved':'Application rejected','Your application for '+a.item_name+(b.status==='approved'?' has been approved. You can now join the Collabo Group Chat.':' was not approved.'),'#project/'+decision[1]).run();}catch(e){console.error('Decision notification failed',e)}
     return json({updated:true,status:b.status});
    }
+   // Initiator-only exit planning. Requests are recorded but do not automatically
+   // transfer ownership, cancel agreements, remove collaborators or close projects.
+   const initiatorExit=/^\/api\/projects\/([a-f0-9-]{36})\/initiator-exit$/.exec(url.pathname);
+   if(initiatorExit&&['GET','POST'].includes(request.method)){
+    const project=await env.DB.prepare('SELECT owner_clerk_id FROM projects WHERE id=?').bind(initiatorExit[1]).first();
+    if(!project)return json({error:'Collabo not found'},404);
+    if(project.owner_clerk_id!==user)return json({error:'Only the initiator can manage initiator exit'},403);
+    const table=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='collabo_initiator_exit_requests'").first();
+    if(!table)return json({error:'Initiator exit migration required',code:'INITIATOR_EXIT_MIGRATION_REQUIRED'},503);
+    if(request.method==='GET'){
+     const result=await env.DB.prepare('SELECT id,exit_option,reason,proposed_successor,obligations,status,created_at FROM collabo_initiator_exit_requests WHERE project_id=? ORDER BY created_at DESC LIMIT 30').bind(initiatorExit[1]).all();
+     return json({requests:result.results});
+    }
+    const b=await body(request);
+    const option=String(b?.exit_option||''),reason=String(b?.reason||'').trim(),obligations=String(b?.obligations||'').trim(),successor=String(b?.proposed_successor||'').trim();
+    if(!['transfer','pause','close'].includes(option))return json({error:'Select a valid exit option'},400);
+    if(reason.length<10||reason.length>2000)return json({error:'Provide a reason of 10–2000 characters'},400);
+    if(obligations.length<5||obligations.length>3000)return json({error:'Describe outstanding obligations (5–3000 characters)'},400);
+    if(option==='transfer'&&!successor)return json({error:'Identify the proposed successor'},400);
+    if(successor.length>200)return json({error:'Successor name too long'},400);
+    if(b?.acknowledge!==true)return json({error:'Acknowledge that commitments remain until resolved'},400);
+    const pending=await env.DB.prepare("SELECT id FROM collabo_initiator_exit_requests WHERE project_id=? AND status='pending' LIMIT 1").bind(initiatorExit[1]).first();
+    if(pending)return json({error:'An initiator exit request is already pending'},409);
+    const id=crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO collabo_initiator_exit_requests(id,project_id,requested_by,exit_option,reason,proposed_successor,obligations,status) VALUES(?,?,?,?,?,?,?,'pending')").bind(id,initiatorExit[1],user,option,reason,successor,obligations).run();
+    return json({id,status:'pending',message:'Exit request recorded. Ownership and project access remain unchanged until a reviewed handover or closure.'},201);
+   }
    // Project participation exit workflow. All changes are recorded; team chat remains immutable.
    const exits=/^\/api\/projects\/([a-f0-9-]{36})\/collaborator-exits(?:\/([a-f0-9-]{36}))?$/.exec(url.pathname);
    if(exits&&['GET','POST','PATCH'].includes(request.method)){
