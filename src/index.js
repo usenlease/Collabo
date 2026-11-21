@@ -140,28 +140,26 @@ export default {
    // Explicit allowlist, checked server-side for every administrative request.
    if(url.pathname.startsWith('/api/admin/')){
     const allowed=String(env.ADMIN_CLERK_USER_IDS||'').split(',').map(v=>v.trim()).filter(Boolean);
-    let authorized=allowed.includes(user);
-    // Optional email allowlist: resolve the authenticated Clerk user on the server.
-    // Never trust an email submitted by the browser or an unverified JWT field.
-    if(!authorized && env.CLERK_SECRET_KEY){
-     const emails=String(env.ADMIN_EMAILS||'').split(',').map(v=>v.trim().toLowerCase()).filter(Boolean);
-     if(emails.length && (env.CLERK_ISSUER||productionIssuer)===productionIssuer){
-      try{
-       const response=await fetch('https://api.clerk.com/v1/users/'+encodeURIComponent(user),{
-        headers:{Authorization:'Bearer '+env.CLERK_SECRET_KEY}
-       });
-       if(response.ok){
-        const clerkUser=await response.json();
-        const verified=(clerkUser.email_addresses||[]).filter(e=>e.verification?.status==='verified').map(e=>String(e.email_address||'').trim().toLowerCase());
-        authorized=verified.some(email=>emails.includes(email));
-       }
-      }catch(e){console.error('Admin Clerk email verification failed',e)}
-     }
-    }
-    if(!authorized)return json({error:'Administrator access is not configured for this account.'},403);
+    let adminLevel=allowed.includes(user)?1:0;
+    const emails=String(env.ADMIN_EMAILS||'').split(',').map(v=>v.trim().toLowerCase()).filter(Boolean);
+    const level2Emails=['scentiall@gmail.com',...String(env.ADMIN_LEVEL2_EMAILS||'').split(',').map(v=>v.trim().toLowerCase()).filter(Boolean)];
+    if(env.CLERK_SECRET_KEY && (env.CLERK_ISSUER||productionIssuer)===productionIssuer){
+     try{
+      const response=await fetch('https://api.clerk.com/v1/users/'+encodeURIComponent(user),{headers:{Authorization:'Bearer '+env.CLERK_SECRET_KEY}});
+      if(response.ok){
+       const profile=await response.json();
+       const verified=(profile.email_addresses||[]).filter(e=>e.verification?.status==='verified').map(e=>String(e.email_address||'').trim().toLowerCase());
+       if(verified.some(email=>level2Emails.includes(email)))adminLevel=2;
+       else if(verified.some(email=>emails.includes(email)))adminLevel=1;
+      }else if(adminLevel===1)return json({error:'Administrator identity verification unavailable'},503);
+     }catch(e){return json({error:'Administrator identity verification unavailable'},503)}
+    }else if(adminLevel===1)return json({error:'Administrator identity verification unavailable'},503);
+    if(!adminLevel)return json({error:'Administrator access is not configured for this account.'},403);
+    if(adminLevel===2&&!(request.method==='GET'&&url.pathname==='/api/admin/overview')&&!(request.method==='POST'&&/^\/api\/admin\/projects\/[a-f0-9-]{36}\/moderation$/.test(url.pathname)))return json({error:'Level 2 permission denied'},403);
     const moderation=/^\/api\/admin\/projects\/([a-f0-9-]{36})\/moderation$/.exec(url.pathname);
     if(moderation&&request.method==='POST'){
      const payload=await body(request),action=clean(payload?.action,32),reason=clean(payload?.reason,1000);
+     if(adminLevel===2&&!['pause','resume','reject'].includes(action))return json({error:'Level 2 administrators may only approve, reject or pause projects.'},403);
      if(!['pause','resume','reject','clarification','delete'].includes(action))return json({error:'Invalid moderation action'},400);
      if(action!=='resume'&&reason.length<5)return json({error:'Provide a reason (at least 5 characters)'},400);
      const project=await env.DB.prepare('SELECT id,status FROM projects WHERE id=?').bind(moderation[1]).first();
@@ -193,7 +191,7 @@ export default {
      const approved=new Set(apps.filter(x=>x.status==='approved').map(x=>x.project_id));
      const count={total:all.length,completed:all.filter(x=>x.status==='closed').length,paused:all.filter(x=>x.status==='paused').length,ongoing:all.filter(x=>approved.has(x.id)&&x.status==='open').length,no_collaborators:all.filter(x=>!approved.has(x.id)).length};
      const locations={};for(const p of all){const place=(p.location||'Unspecified').split(',').map(x=>x.trim()).filter(Boolean).pop()||'Unspecified';locations[place]=(locations[place]||0)+1}
-     return json({member_counts:{known_unique_members:joined.size,initiators:new Set(all.map(x=>x.owner_clerk_id)).size,applicants:new Set(apps.map(x=>x.applicant_clerk_id)).size,note:'Counts include participants recorded in projects and applications; not all Clerk registrations.'},members:[...joined].slice(0,500).map(id=>({id,initiator:all.some(p=>p.owner_clerk_id===id),collaborator:apps.some(a=>a.applicant_clerk_id===id)})),collabos:all.map(p=>({...p,moderation_action:moderationByProject.get(p.id)?.action||null,moderation_reason:moderationByProject.get(p.id)?.reason||null,approved_collaborators:apps.filter(a=>a.project_id===p.id&&a.status==='approved').length,applications:apps.filter(a=>a.project_id===p.id).length})),count,locations:Object.entries(locations).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count})),finances:{collected:null,transacted:null,note:'No verified platform payment ledger is connected. Project estimates are not revenue.'},email:{enabled:false,note:'Bulk email requires a configured provider, consent controls, and delivery logs.'}});
+     return json({admin_level:adminLevel,member_counts:{known_unique_members:joined.size,initiators:new Set(all.map(x=>x.owner_clerk_id)).size,applicants:new Set(apps.map(x=>x.applicant_clerk_id)).size,note:'Counts include participants recorded in projects and applications; not all Clerk registrations.'},members:[...joined].slice(0,500).map(id=>({id,initiator:all.some(p=>p.owner_clerk_id===id),collaborator:apps.some(a=>a.applicant_clerk_id===id)})),collabos:all.map(p=>({...p,moderation_action:moderationByProject.get(p.id)?.action||null,moderation_reason:moderationByProject.get(p.id)?.reason||null,approved_collaborators:apps.filter(a=>a.project_id===p.id&&a.status==='approved').length,applications:apps.filter(a=>a.project_id===p.id).length})),count,locations:Object.entries(locations).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count})),finances:{collected:null,transacted:null,note:'No verified platform payment ledger is connected. Project estimates are not revenue.'},email:{enabled:false,note:'Bulk email requires a configured provider, consent controls, and delivery logs.'}});
     }
     return json({error:'Admin endpoint unavailable'},404);
    }
