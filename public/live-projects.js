@@ -535,7 +535,7 @@ const applicationForm=document.getElementById('role-apply');
 if(applicationForm&&applicationTriggers.length){
  let collapseTimer;
  const collapse=()=>{clearTimeout(collapseTimer);applicationForm.hidden=true;};
- const scheduleCollapse=()=>{clearTimeout(collapseTimer);if(!applicationForm.hidden)collapseTimer=setTimeout(collapse,5000);};
+ const scheduleCollapse=()=>{clearTimeout(collapseTimer);if(!applicationForm.hidden)collapseTimer=setTimeout(collapse,15000);};
  applicationForm.hidden=true;
  applicationForm.setAttribute('aria-label','Role application form');
  applicationTriggers.forEach(trigger=>trigger.addEventListener('click',()=>{
