@@ -39,8 +39,20 @@
  }
  function playSound(force=false){
   if((audioMode!=='beep'&&!force)||document.hidden||!audioContext||audioContext.state!=='running')return false;
+  // Three clear, high-visibility chimes at a strong but unclipped output level.
+  // The browser cannot exceed the device's hardware/system volume.
   const now=audioContext.currentTime;
-  [660,880].forEach((hz,i)=>{const o=audioContext.createOscillator(),g=audioContext.createGain(),start=now+i*.17;o.frequency.value=hz;o.type='sine';g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(.12,start+.02);g.gain.exponentialRampToValueAtTime(.0001,start+.15);o.connect(g);g.connect(audioContext.destination);o.start(start);o.stop(start+.16)});
+  [0,.29,.58].forEach((offset,i)=>{
+   const oscillator=audioContext.createOscillator(),gain=audioContext.createGain();
+   const start=now+offset;
+   oscillator.type='square';oscillator.frequency.setValueAtTime(i===1?880:740,start);
+   gain.gain.setValueAtTime(.0001,start);
+   gain.gain.linearRampToValueAtTime(.42,start+.012);
+   gain.gain.setValueAtTime(.42,start+.17);
+   gain.gain.linearRampToValueAtTime(.0001,start+.22);
+   oscillator.connect(gain);gain.connect(audioContext.destination);
+   oscillator.start(start);oscillator.stop(start+.23);
+  });
   return true;
  }
  function speakNotification(force=false){
