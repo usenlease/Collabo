@@ -24,7 +24,22 @@
   [660,880].forEach((hz,i)=>{const o=audioContext.createOscillator(),g=audioContext.createGain(),start=now+i*.17;o.frequency.value=hz;o.type='sine';g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(.12,start+.02);g.gain.exponentialRampToValueAtTime(.0001,start+.15);o.connect(g);g.connect(audioContext.destination);o.start(start);o.stop(start+.16)});
   return true;
  }
- async function testSound(){const ready=await unlockAudio();soundStatus.textContent=ready&&playSound(true)?'Test alert played.':'Sound unavailable. Check device volume and browser audio permissions.';}
+ function speakNotification(force=false){
+  if((!soundEnabled&&!force)||document.hidden)return false;
+  if(!('speechSynthesis' in window)||!('SpeechSynthesisUtterance' in window))return playSound(force);
+  try{
+   const voice=new SpeechSynthesisUtterance('You have a message in Cloud Collabo.');
+   voice.lang='en-US';voice.rate=0.95;voice.volume=1;
+   voice.onerror=()=>{if(!document.hidden)playSound(force);};
+   window.speechSynthesis.cancel();
+   window.speechSynthesis.speak(voice);
+   return true;
+  }catch(e){return playSound(force);}
+ }
+ async function testSound(){
+  await unlockAudio();
+  soundStatus.textContent=speakNotification(true)?'Playing spoken test alert.':'Sound unavailable. Check device volume and browser permissions.';
+ }
  soundToggle.addEventListener('click',async()=>{soundEnabled=!soundEnabled;localStorage.setItem('cc-notification-sound',soundEnabled?'on':'off');soundLabel();soundStatus.textContent=soundEnabled?'Sound enabled for new notifications while this page is active.':'Sound disabled.';if(soundEnabled)await testSound();});
  soundTest.addEventListener('click',testSound);
  // Browsers require a user gesture to unlock audio. Re-use the first page interaction
@@ -64,7 +79,7 @@
    const data=await request('/notifications');
    items=data.notifications||[];
    const unreadItems=items.filter(n=>!n.read_at);
-   if(initialized){const fresh=unreadItems.filter(n=>!knownUnreadIds.has(n.id));fresh.slice(0,3).forEach(showToast);if(fresh.length)playSound();}
+   if(initialized){const fresh=unreadItems.filter(n=>!knownUnreadIds.has(n.id));fresh.slice(0,3).forEach(showToast);if(fresh.length)speakNotification();}
    knownUnreadIds=new Set(unreadItems.map(n=>n.id));initialized=true;
    count.textContent=String(data.unread||0);
    count.style.display=data.unread?'inline':'none';
