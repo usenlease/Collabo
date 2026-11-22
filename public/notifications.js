@@ -71,13 +71,40 @@
   }catch{return playSound(true);}
  }
  function announce(){if(audioMode==='voice')return speakNotification();if(audioMode==='beep')return playSound();return false;}
- async function testSound(){
+ function testSound(){
   if(audioMode==='silent')return;
-  await unlockAudio();
-  const played=audioMode==='voice'?speakNotification():playSound();
-  soundStatus.textContent=played?'Playing '+(audioMode==='voice'?'voice announcement':'beep')+'.':'Audio unavailable. Check volume or tap again.';
+  // Start speech directly from the tap; awaiting AudioContext.resume() first can
+  // consume the user-activation window on iOS Safari/Chrome.
+  if(audioMode==='voice'){
+   const played=speakNotification();
+   soundStatus.textContent=played?'Playing voice announcement.':'Voice unavailable on this device.';
+   return;
+  }
+  if(!AudioContextClass){soundStatus.textContent='This browser does not support beep playback.';return;}
+  try{
+   audioContext=audioContext||new AudioContextClass();
+   // Queue oscillators synchronously during the user's tap, then resume the
+   // context. This is more reliable on iPhone/iPad than awaiting resume first.
+   const queued=audioContext.state!=='closed'&&playSoundQueued();
+   if(audioContext.state==='suspended'){
+    audioContext.resume().then(()=>{soundStatus.textContent='Beep test played. If silent, check media volume and Silent Mode.';}).catch(()=>{soundStatus.textContent='Audio blocked. Tap Test audio again.';});
+   }else soundStatus.textContent=queued?'Beep test played. If silent, check media volume and Silent Mode.':'Audio unavailable. Tap Test audio again.';
+  }catch{soundStatus.textContent='Audio blocked. Tap Test audio again.';}
  }
- modeSelect.addEventListener('change',()=>{audioMode=modeSelect.value;localStorage.setItem('cc-notification-audio-mode',audioMode);localStorage.setItem('cc-notification-sound',audioMode==='silent'?'off':'on');updateControls();if(audioMode==='silent'&&'speechSynthesis' in window)window.speechSynthesis.cancel();soundStatus.textContent='Preference saved on this device.';if(audioMode!=='silent')void testSound();});
+ function playSoundQueued(){
+  if(document.hidden||!audioContext||audioContext.state==='closed')return false;
+  const now=audioContext.currentTime;
+  [0,.29,.58].forEach((offset,i)=>{
+   const oscillator=audioContext.createOscillator(),gain=audioContext.createGain(),start=now+offset;
+   oscillator.type='square';oscillator.frequency.setValueAtTime(i===1?880:740,start);
+   gain.gain.setValueAtTime(.0001,start);gain.gain.linearRampToValueAtTime(.42,start+.012);
+   gain.gain.setValueAtTime(.42,start+.17);gain.gain.linearRampToValueAtTime(.0001,start+.22);
+   oscillator.connect(gain);gain.connect(audioContext.destination);
+   oscillator.start(start);oscillator.stop(start+.23);
+  });
+  return true;
+ }
+ modeSelect.addEventListener('change',()=>{audioMode=modeSelect.value;localStorage.setItem('cc-notification-audio-mode',audioMode);localStorage.setItem('cc-notification-sound',audioMode==='silent'?'off':'on');updateControls();if(audioMode==='silent'&&'speechSynthesis' in window)window.speechSynthesis.cancel();soundStatus.textContent='Preference saved on this device.';if(audioMode!=='silent')testSound();});
  voiceSelect.addEventListener('change',()=>{localStorage.setItem('cc-notification-voice',voiceSelect.value);soundStatus.textContent='Voice preference saved on this device.';});
  soundTest.addEventListener('click',testSound);
  const activateAudio=()=>{if(audioMode!=='silent')void unlockAudio();};
