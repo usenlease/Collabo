@@ -3,54 +3,72 @@
  const bell=document.getElementById('cc-notification-bell'),panel=document.getElementById('cc-notification-panel'),count=document.getElementById('cc-notification-count'),list=document.getElementById('cc-notification-list');
  if(!bell||!panel)return;
  const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- let soundEnabled=localStorage.getItem('cc-notification-sound')==='on',audioContext=null;
+ let audioMode=localStorage.getItem('cc-notification-audio-mode')||(localStorage.getItem('cc-notification-sound')==='on'?'voice':'silent');
+ if(!['voice','beep','silent'].includes(audioMode))audioMode='silent';
+ let audioContext=null;
  const AudioContextClass=window.AudioContext||window.webkitAudioContext;
- const soundToggle=document.createElement('button');soundToggle.type='button';soundToggle.style.cssText='display:inline-block;margin:8px 6px 8px 0;padding:7px 10px;border:1px solid #d5c169;border-radius:7px;background:#fff8d8;color:#263322';
- const soundTest=document.createElement('button');soundTest.type='button';soundTest.textContent='Test sound 🔔';soundTest.style.cssText=soundToggle.style.cssText;
+ const controlBox=document.createElement('div');controlBox.style.cssText='display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0';
+ const modeLabel=document.createElement('label');modeLabel.textContent='Notification audio: ';modeLabel.style.cssText='font-weight:600;font-size:14px';
+ const modeSelect=document.createElement('select');modeSelect.setAttribute('aria-label','Notification audio mode');
+ modeSelect.style.cssText='padding:8px;border:1px solid #b7cbbf;border-radius:8px;background:white;color:#173a29';
+ [['voice','Voice announcement'],['beep','Beep'],['silent','Silent']].forEach(([value,label])=>{const o=document.createElement('option');o.value=value;o.textContent=label;modeSelect.appendChild(o)});
+ modeSelect.value=audioMode;modeLabel.appendChild(modeSelect);
+ const voiceLabel=document.createElement('label');voiceLabel.textContent='Voice: ';voiceLabel.style.cssText='font-weight:600;font-size:14px';
+ const voiceSelect=document.createElement('select');voiceSelect.setAttribute('aria-label','Notification announcement voice');
+ voiceSelect.style.cssText=modeSelect.style.cssText;voiceLabel.appendChild(voiceSelect);
+ const soundTest=document.createElement('button');soundTest.type='button';soundTest.textContent='▶ Test audio';soundTest.style.cssText='padding:8px 12px;border:1px solid #d5c169;border-radius:8px;background:#fff8d8;color:#263322;cursor:pointer';
  const soundStatus=document.createElement('span');soundStatus.setAttribute('role','status');soundStatus.style.cssText='display:block;font-size:12px;color:#48594b';
- const soundLabel=()=>soundToggle.textContent='Notification sound: '+(soundEnabled?'On 🔊':'Off 🔇');
- soundLabel();const heading=panel.querySelector('strong');heading?.insertAdjacentElement('afterend',soundToggle);soundToggle.insertAdjacentElement('afterend',soundTest);soundTest.insertAdjacentElement('afterend',soundStatus);
+ controlBox.append(modeLabel,voiceLabel,soundTest,soundStatus);
+ panel.querySelector('strong')?.insertAdjacentElement('afterend',controlBox);
+ const savedVoice=localStorage.getItem('cc-notification-voice')||'preferred-british-male';
+ function populateVoices(){
+  const voices=('speechSynthesis' in window)?window.speechSynthesis.getVoices():[];
+  const current=voiceSelect.value||savedVoice;
+  voiceSelect.replaceChildren();
+  const recommended=document.createElement('option');recommended.value='preferred-british-male';recommended.textContent='British male (preferred)';voiceSelect.appendChild(recommended);
+  voices.filter(v=>/^en[-_]/i.test(v.lang)).forEach(v=>{const o=document.createElement('option');o.value=v.voiceURI;o.textContent=v.name+' ('+v.lang+')';voiceSelect.appendChild(o)});
+  voiceSelect.value=Array.from(voiceSelect.options).some(o=>o.value===current)?current:'preferred-british-male';
+ }
+ populateVoices();
+ if('speechSynthesis' in window)window.speechSynthesis.addEventListener?.('voiceschanged',populateVoices);
+ function updateControls(){voiceLabel.hidden=audioMode!=='voice';soundTest.disabled=audioMode==='silent';soundTest.style.opacity=audioMode==='silent'?'0.5':'1';}
+ updateControls();
  async function unlockAudio(){
-  if(!AudioContextClass){soundStatus.textContent='Audio is not supported by this browser.';return false;}
-  try{
-   audioContext=audioContext||new AudioContextClass();
-   if(audioContext.state!=='running')await audioContext.resume();
-   return audioContext.state==='running';
-  }catch(e){soundStatus.textContent='Browser blocked audio. Tap Test sound again.';return false;}
+  if(!AudioContextClass)return false;
+  try{audioContext=audioContext||new AudioContextClass();if(audioContext.state!=='running')await audioContext.resume();return audioContext.state==='running';}catch{return false;}
  }
  function playSound(force=false){
-  if((!soundEnabled&&!force)||document.hidden||!audioContext||audioContext.state!=='running')return false;
+  if((audioMode!=='beep'&&!force)||document.hidden||!audioContext||audioContext.state!=='running')return false;
   const now=audioContext.currentTime;
   [660,880].forEach((hz,i)=>{const o=audioContext.createOscillator(),g=audioContext.createGain(),start=now+i*.17;o.frequency.value=hz;o.type='sine';g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(.12,start+.02);g.gain.exponentialRampToValueAtTime(.0001,start+.15);o.connect(g);g.connect(audioContext.destination);o.start(start);o.stop(start+.16)});
   return true;
  }
  function speakNotification(force=false){
-  if((!soundEnabled&&!force)||document.hidden)return false;
-  if(!('speechSynthesis' in window)||!('SpeechSynthesisUtterance' in window))return playSound(force);
+  if((audioMode!=='voice'&&!force)||document.hidden)return false;
+  if(!('speechSynthesis' in window)||!('SpeechSynthesisUtterance' in window))return playSound(true);
   try{
-   const voice=new SpeechSynthesisUtterance('You have a message in Cloud Collabo.');
-   // Prefer an installed British male voice; speech engines do not expose a
-   // standardized gender property, so use known voice names where available.
-   const available=window.speechSynthesis.getVoices();
-   const british=available.filter(v=>/^en[-_]GB$/i.test(v.lang));
-   const preferred=british.find(v=>/daniel|george|oliver|arthur|ryan|alfie|male/i.test(v.name))||british[0];
-   if(preferred)voice.voice=preferred;
-   voice.lang='en-GB';voice.rate=0.95;voice.pitch=0.9;voice.volume=1;
-   voice.onerror=()=>{if(!document.hidden)playSound(force);};
-   window.speechSynthesis.cancel();
-   window.speechSynthesis.speak(voice);
+   const utterance=new SpeechSynthesisUtterance('You have a message in Cloud Collabo.');
+   const voices=window.speechSynthesis.getVoices();
+   let selected=voices.find(v=>v.voiceURI===voiceSelect.value);
+   if(!selected){const british=voices.filter(v=>/^en[-_]GB$/i.test(v.lang));selected=british.find(v=>/daniel|george|oliver|arthur|ryan|alfie|male/i.test(v.name))||british[0];}
+   if(selected)utterance.voice=selected;
+   utterance.lang=selected?.lang||'en-GB';utterance.rate=0.95;utterance.volume=1;
+   utterance.onerror=()=>{if(!document.hidden)playSound(true)};
+   window.speechSynthesis.cancel();window.speechSynthesis.speak(utterance);
    return true;
-  }catch(e){return playSound(force);}
+  }catch{return playSound(true);}
  }
+ function announce(){if(audioMode==='voice')return speakNotification();if(audioMode==='beep')return playSound();return false;}
  async function testSound(){
+  if(audioMode==='silent')return;
   await unlockAudio();
-  soundStatus.textContent=speakNotification(true)?'Playing spoken test alert.':'Sound unavailable. Check device volume and browser permissions.';
+  const played=audioMode==='voice'?speakNotification():playSound();
+  soundStatus.textContent=played?'Playing '+(audioMode==='voice'?'voice announcement':'beep')+'.':'Audio unavailable. Check volume or tap again.';
  }
- soundToggle.addEventListener('click',async()=>{soundEnabled=!soundEnabled;localStorage.setItem('cc-notification-sound',soundEnabled?'on':'off');soundLabel();soundStatus.textContent=soundEnabled?'Sound enabled for new notifications while this page is active.':'Sound disabled.';if(soundEnabled)await testSound();});
+ modeSelect.addEventListener('change',()=>{audioMode=modeSelect.value;localStorage.setItem('cc-notification-audio-mode',audioMode);localStorage.setItem('cc-notification-sound',audioMode==='silent'?'off':'on');updateControls();if(audioMode==='silent'&&'speechSynthesis' in window)window.speechSynthesis.cancel();soundStatus.textContent='Preference saved on this device.';if(audioMode!=='silent')void testSound();});
+ voiceSelect.addEventListener('change',()=>{localStorage.setItem('cc-notification-voice',voiceSelect.value);soundStatus.textContent='Voice preference saved on this device.';});
  soundTest.addEventListener('click',testSound);
- // Browsers require a user gesture to unlock audio. Re-use the first page interaction
- // for users who previously saved Sound On, rather than requiring them to toggle it off/on.
- const activateAudio=()=>{if(soundEnabled)void unlockAudio();};
+ const activateAudio=()=>{if(audioMode!=='silent')void unlockAudio();};
  document.addEventListener('pointerdown',activateAudio,{capture:true});
  document.addEventListener('keydown',activateAudio,{capture:true});
   let items=[];
@@ -85,7 +103,7 @@
    const data=await request('/notifications');
    items=data.notifications||[];
    const unreadItems=items.filter(n=>!n.read_at);
-   if(initialized){const fresh=unreadItems.filter(n=>!knownUnreadIds.has(n.id));fresh.slice(0,3).forEach(showToast);if(fresh.length)speakNotification();}
+   if(initialized){const fresh=unreadItems.filter(n=>!knownUnreadIds.has(n.id));fresh.slice(0,3).forEach(showToast);if(fresh.length)announce();}
    knownUnreadIds=new Set(unreadItems.map(n=>n.id));initialized=true;
    count.textContent=String(data.unread||0);
    count.style.display=data.unread?'inline':'none';
