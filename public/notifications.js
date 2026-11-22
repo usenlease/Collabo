@@ -70,39 +70,38 @@
    return true;
   }catch{return playSound(true);}
  }
- function announce(){if(audioMode==='voice')return speakNotification();if(audioMode==='beep')return playSound();return false;}
+ function announce(){if(audioMode==='voice')return speakNotification();if(audioMode==='beep'){playBeepMedia().catch(()=>{void unlockAudio().then(()=>playSound());});return true;}return false;}
+ let beepAudio=null;
+ function getBeepAudio(){
+  if(beepAudio)return beepAudio;
+  const rate=22050,count=Math.ceil(rate*1.05),buffer=new ArrayBuffer(44+count*2),view=new DataView(buffer);
+  const put=(at,str)=>{for(let i=0;i<str.length;i++)view.setUint8(at+i,str.charCodeAt(i));};
+  put(0,'RIFF');view.setUint32(4,36+count*2,true);put(8,'WAVE');put(12,'fmt ');
+  view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);
+  view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);
+  view.setUint16(32,2,true);view.setUint16(34,16,true);put(36,'data');view.setUint32(40,count*2,true);
+  for(let i=0;i<count;i++){
+   const t=i/rate;let sample=0;
+   [0,.29,.58].forEach((start,n)=>{const dt=t-start;if(dt>=0&&dt<.22){
+    const fade=Math.max(0,Math.min(1,dt/.012,(.22-dt)/.025));
+    sample+=.8*fade*Math.sin(2*Math.PI*(n===1?880:740)*dt);
+   }});
+   view.setInt16(44+2*i,Math.round(Math.max(-1,Math.min(1,sample))*32767),true);
+  }
+  const url=URL.createObjectURL(new Blob([buffer],{type:'audio/wav'}));
+  beepAudio=new Audio(url);beepAudio.preload='auto';beepAudio.volume=1;
+  return beepAudio;
+ }
+ function playBeepMedia(){
+  if(document.hidden)return Promise.reject(new Error('Page not active'));
+  const player=getBeepAudio();player.pause();player.currentTime=0;return player.play();
+ }
  function testSound(){
   if(audioMode==='silent')return;
-  // Start speech directly from the tap; awaiting AudioContext.resume() first can
-  // consume the user-activation window on iOS Safari/Chrome.
-  if(audioMode==='voice'){
-   const played=speakNotification();
-   soundStatus.textContent=played?'Playing voice announcement.':'Voice unavailable on this device.';
-   return;
-  }
-  if(!AudioContextClass){soundStatus.textContent='This browser does not support beep playback.';return;}
-  try{
-   audioContext=audioContext||new AudioContextClass();
-   // Queue oscillators synchronously during the user's tap, then resume the
-   // context. This is more reliable on iPhone/iPad than awaiting resume first.
-   const queued=audioContext.state!=='closed'&&playSoundQueued();
-   if(audioContext.state==='suspended'){
-    audioContext.resume().then(()=>{soundStatus.textContent='Beep test played. If silent, check media volume and Silent Mode.';}).catch(()=>{soundStatus.textContent='Audio blocked. Tap Test audio again.';});
-   }else soundStatus.textContent=queued?'Beep test played. If silent, check media volume and Silent Mode.':'Audio unavailable. Tap Test audio again.';
-  }catch{soundStatus.textContent='Audio blocked. Tap Test audio again.';}
- }
- function playSoundQueued(){
-  if(document.hidden||!audioContext||audioContext.state==='closed')return false;
-  const now=audioContext.currentTime;
-  [0,.29,.58].forEach((offset,i)=>{
-   const oscillator=audioContext.createOscillator(),gain=audioContext.createGain(),start=now+offset;
-   oscillator.type='square';oscillator.frequency.setValueAtTime(i===1?880:740,start);
-   gain.gain.setValueAtTime(.0001,start);gain.gain.linearRampToValueAtTime(.42,start+.012);
-   gain.gain.setValueAtTime(.42,start+.17);gain.gain.linearRampToValueAtTime(.0001,start+.22);
-   oscillator.connect(gain);gain.connect(audioContext.destination);
-   oscillator.start(start);oscillator.stop(start+.23);
-  });
-  return true;
+  if(audioMode==='voice'){soundStatus.textContent=speakNotification()?'Voice requested.':'Voice unavailable.';return;}
+  soundStatus.textContent='Starting beep test…';
+  try{playBeepMedia().then(()=>{soundStatus.textContent='Beep playback started. Did you hear it?';}).catch(e=>{soundStatus.textContent='Beep blocked ('+(e?.name||'error')+'). Check iPad volume or tap again.';});}
+  catch(e){soundStatus.textContent='Unable to start beep: '+(e?.message||'browser error');}
  }
  modeSelect.addEventListener('change',()=>{audioMode=modeSelect.value;localStorage.setItem('cc-notification-audio-mode',audioMode);localStorage.setItem('cc-notification-sound',audioMode==='silent'?'off':'on');updateControls();if(audioMode==='silent'&&'speechSynthesis' in window)window.speechSynthesis.cancel();soundStatus.textContent='Preference saved on this device.';if(audioMode!=='silent')testSound();});
  voiceSelect.addEventListener('change',()=>{localStorage.setItem('cc-notification-voice',voiceSelect.value);soundStatus.textContent='Voice preference saved on this device.';});
