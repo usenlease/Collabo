@@ -572,7 +572,13 @@ if(form){const select=form.elements.need_id,quantity=form.elements.offered_quant
 const apps=appData.applications;
 // Participation management: withdrawal, termination and replacement review.
 const exitHost=document.createElement('section');exitHost.id='collabo-participation';exitHost.className='notice';
-document.getElementById('team-chat').insertAdjacentElement('beforebegin',exitHost);
+const exitTab=document.createElement('details');exitTab.id='collabo-participation-tab';
+exitTab.style.cssText='margin:16px 0;border:1px solid #c9dfd1;border-radius:12px;background:#f3faf5;overflow:hidden';
+const exitSummary=document.createElement('summary');exitSummary.textContent='Collaborator departures & replacements · History';
+exitSummary.style.cssText='cursor:pointer;padding:14px 16px;font-weight:700;color:#164b34;list-style-position:inside';
+exitTab.append(exitSummary,exitHost);
+exitHost.style.cssText='padding:0 14px 14px';
+document.getElementById('team-chat').insertAdjacentElement('beforebegin',exitTab);
 async function refreshExits(){
  const approved=apps.filter(a=>a.status==='approved');
  try{
