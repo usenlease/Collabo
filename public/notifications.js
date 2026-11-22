@@ -29,7 +29,13 @@
   if(!('speechSynthesis' in window)||!('SpeechSynthesisUtterance' in window))return playSound(force);
   try{
    const voice=new SpeechSynthesisUtterance('You have a message in Cloud Collabo.');
-   voice.lang='en-US';voice.rate=0.95;voice.volume=1;
+   // Prefer an installed British male voice; speech engines do not expose a
+   // standardized gender property, so use known voice names where available.
+   const available=window.speechSynthesis.getVoices();
+   const british=available.filter(v=>/^en[-_]GB$/i.test(v.lang));
+   const preferred=british.find(v=>/daniel|george|oliver|arthur|ryan|alfie|male/i.test(v.name))||british[0];
+   if(preferred)voice.voice=preferred;
+   voice.lang='en-GB';voice.rate=0.95;voice.pitch=0.9;voice.volume=1;
    voice.onerror=()=>{if(!document.hidden)playSound(force);};
    window.speechSynthesis.cancel();
    window.speechSynthesis.speak(voice);
