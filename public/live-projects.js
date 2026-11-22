@@ -33,6 +33,12 @@ compactApplicationStyle.textContent=`
 .market #role-apply>#apply-feedback{margin:0!important}
 @media(max-width:600px){.market #role-apply{grid-template-columns:1fr;row-gap:7px}.market #role-apply>h3,.market #role-apply>#apply-feedback,.market #role-apply>button[type=submit]{grid-column:1}.market #role-apply textarea{height:60px;min-height:60px}}
 `;
+compactApplicationStyle.textContent+=`
+.market #role-apply:not([hidden]){background:#fff7c2!important;border:2px solid #eab308!important;border-radius:14px!important;padding:16px!important;box-shadow:0 0 0 4px #fef08a66,0 7px 22px #9a760b1c!important;scroll-margin-top:20px}
+.market #role-apply:not([hidden])>h3{background:#fde68a;color:#713f12;padding:10px 12px!important;border-radius:9px;font-weight:800}
+.market #role-apply:not([hidden])>h3:before{content:'➜ ';color:#a16207}
+.market #role-apply:not([hidden])>button[type=submit]{background:#166534;color:#fff;font-weight:700}
+`;
 document.head.appendChild(compactApplicationStyle);
 const collaboProgressTrackStyle=document.createElement('style');
 collaboProgressTrackStyle.textContent='.market .collabo-progress-compact h3{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.market .collabo-progress-current{font-size:13.8px;font-weight:500;color:white}.market .collabo-stage-track{position:relative;height:8px;background:#d4e5d7;border-radius:8px;margin:14px 16px 18px}.market .collabo-stage-fill{height:100%;background:#168444;border-radius:8px;transition:width .3s}.market .collabo-stage-dots{position:absolute;inset:-9px 0;display:flex;justify-content:space-between;align-items:flex-start}.market .collabo-stage-dots span{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#e2e8e3;border:2px solid #b5c4b9;color:#43584a;font-size:13.8px;font-weight:700}.market .collabo-stage-dots span.reached{background:#168444;border-color:#168444;color:white}.market .collabo-progress-step.is-current{outline:2px solid #168444;outline-offset:-2px}.market .collabo-progress-step.is-upcoming{opacity:.65}.market .collabo-progress-step.is-done{opacity:.9}';
