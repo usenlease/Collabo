@@ -533,6 +533,9 @@ document.getElementById('restore-roles').onsubmit=async e=>{e.preventDefault();c
 const applicationTriggers=root.querySelectorAll('[data-apply-need]');
 const applicationForm=document.getElementById('role-apply');
 if(applicationForm&&applicationTriggers.length){
+ let collapseTimer;
+ const collapse=()=>{clearTimeout(collapseTimer);applicationForm.hidden=true;};
+ const scheduleCollapse=()=>{clearTimeout(collapseTimer);if(!applicationForm.hidden)collapseTimer=setTimeout(collapse,5000);};
  applicationForm.hidden=true;
  applicationForm.setAttribute('aria-label','Role application form');
  applicationTriggers.forEach(trigger=>trigger.addEventListener('click',()=>{
@@ -540,8 +543,17 @@ if(applicationForm&&applicationTriggers.length){
   const roleSelect=applicationForm.elements.namedItem('need_id');
   if(roleSelect){roleSelect.value=trigger.dataset.applyNeed;roleSelect.dispatchEvent(new Event('change',{bubbles:true}));}
   applicationForm.scrollIntoView({behavior:'smooth',block:'start'});
-  const first=applicationForm.elements.namedItem('experience');if(first)setTimeout(()=>first.focus({preventScroll:true}),250);
+  const first=applicationForm.elements.namedItem('experience');if(first)setTimeout(()=>{if(!applicationForm.hidden)first.focus({preventScroll:true});},250);
+  scheduleCollapse();
  }));
+ // Keep the form open while someone is actively completing it.
+ for(const eventName of ['input','change','keydown','pointerdown','focusin'])applicationForm.addEventListener(eventName,scheduleCollapse);
+ document.addEventListener('pointerdown',event=>{
+  if(!applicationForm.hidden&&!applicationForm.contains(event.target)&&!event.target.closest('[data-apply-need]'))collapse();
+ });
+ document.addEventListener('focusin',event=>{
+  if(!applicationForm.hidden&&!applicationForm.contains(event.target)&&!event.target.closest('[data-apply-need]'))collapse();
+ });
 }
 const form=document.getElementById('role-apply');
 if(form){
