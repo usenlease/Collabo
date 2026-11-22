@@ -59,7 +59,7 @@
   if((audioMode!=='voice'&&!force)||document.hidden)return false;
   if(!('speechSynthesis' in window)||!('SpeechSynthesisUtterance' in window))return playSound(true);
   try{
-   const utterance=new SpeechSynthesisUtterance('You have a message in Cloud Collabo.');
+   const utterance=new SpeechSynthesisUtterance('You have a new message on Cloud Collabo.');
    const voices=window.speechSynthesis.getVoices();
    let selected=voices.find(v=>v.voiceURI===voiceSelect.value);
    if(!selected){const british=voices.filter(v=>/^en[-_]GB$/i.test(v.lang));selected=british.find(v=>/daniel|george|oliver|arthur|ryan|alfie|male/i.test(v.name))||british[0];}
