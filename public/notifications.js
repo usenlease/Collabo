@@ -4,20 +4,35 @@
  if(!bell||!panel)return;
  const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let soundEnabled=localStorage.getItem('cc-notification-sound')==='on',audioContext=null;
- const soundToggle=document.createElement('button');soundToggle.type='button';soundToggle.style.cssText='display:block;margin:8px 0;padding:7px 10px;border:1px solid #d5c169;border-radius:7px;background:#fff8d8;color:#263322';
+ const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+ const soundToggle=document.createElement('button');soundToggle.type='button';soundToggle.style.cssText='display:inline-block;margin:8px 6px 8px 0;padding:7px 10px;border:1px solid #d5c169;border-radius:7px;background:#fff8d8;color:#263322';
+ const soundTest=document.createElement('button');soundTest.type='button';soundTest.textContent='Test sound 🔔';soundTest.style.cssText=soundToggle.style.cssText;
+ const soundStatus=document.createElement('span');soundStatus.setAttribute('role','status');soundStatus.style.cssText='display:block;font-size:12px;color:#48594b';
  const soundLabel=()=>soundToggle.textContent='Notification sound: '+(soundEnabled?'On 🔊':'Off 🔇');
- soundLabel();panel.querySelector('strong')?.insertAdjacentElement('afterend',soundToggle);
- soundToggle.addEventListener('click',()=>{
-  soundEnabled=!soundEnabled;localStorage.setItem('cc-notification-sound',soundEnabled?'on':'off');
-  if(soundEnabled){try{audioContext=audioContext||new (window.AudioContext||window.webkitAudioContext)();audioContext.resume().then(playSound).catch(()=>{})}catch{}}
-  soundLabel();
- });
- function playSound(){
-  if(!soundEnabled||document.hidden||!audioContext||audioContext.state!=='running')return;
-  const now=audioContext.currentTime;
-  [660,880].forEach((hz,i)=>{const o=audioContext.createOscillator(),g=audioContext.createGain(),start=now+i*.17;o.frequency.value=hz;o.type='sine';g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(.08,start+.02);g.gain.exponentialRampToValueAtTime(.0001,start+.15);o.connect(g);g.connect(audioContext.destination);o.start(start);o.stop(start+.16)});
+ soundLabel();const heading=panel.querySelector('strong');heading?.insertAdjacentElement('afterend',soundToggle);soundToggle.insertAdjacentElement('afterend',soundTest);soundTest.insertAdjacentElement('afterend',soundStatus);
+ async function unlockAudio(){
+  if(!AudioContextClass){soundStatus.textContent='Audio is not supported by this browser.';return false;}
+  try{
+   audioContext=audioContext||new AudioContextClass();
+   if(audioContext.state!=='running')await audioContext.resume();
+   return audioContext.state==='running';
+  }catch(e){soundStatus.textContent='Browser blocked audio. Tap Test sound again.';return false;}
  }
- let items=[];
+ function playSound(force=false){
+  if((!soundEnabled&&!force)||document.hidden||!audioContext||audioContext.state!=='running')return false;
+  const now=audioContext.currentTime;
+  [660,880].forEach((hz,i)=>{const o=audioContext.createOscillator(),g=audioContext.createGain(),start=now+i*.17;o.frequency.value=hz;o.type='sine';g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(.12,start+.02);g.gain.exponentialRampToValueAtTime(.0001,start+.15);o.connect(g);g.connect(audioContext.destination);o.start(start);o.stop(start+.16)});
+  return true;
+ }
+ async function testSound(){const ready=await unlockAudio();soundStatus.textContent=ready&&playSound(true)?'Test alert played.':'Sound unavailable. Check device volume and browser audio permissions.';}
+ soundToggle.addEventListener('click',async()=>{soundEnabled=!soundEnabled;localStorage.setItem('cc-notification-sound',soundEnabled?'on':'off');soundLabel();soundStatus.textContent=soundEnabled?'Sound enabled for new notifications while this page is active.':'Sound disabled.';if(soundEnabled)await testSound();});
+ soundTest.addEventListener('click',testSound);
+ // Browsers require a user gesture to unlock audio. Re-use the first page interaction
+ // for users who previously saved Sound On, rather than requiring them to toggle it off/on.
+ const activateAudio=()=>{if(soundEnabled)void unlockAudio();};
+ document.addEventListener('pointerdown',activateAudio,{capture:true});
+ document.addEventListener('keydown',activateAudio,{capture:true});
+  let items=[];
  let knownUnreadIds=new Set(),initialized=false,refreshInFlight=false;
  const toast=document.createElement('div');toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');toast.style.cssText='position:fixed;right:16px;top:90px;z-index:9999;max-width:min(350px,90vw);pointer-events:none';document.body.appendChild(toast);
  function navigateToNotification(n){
