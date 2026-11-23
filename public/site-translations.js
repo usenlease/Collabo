@@ -4,6 +4,23 @@ const supported=new Set(['en','es','zh','hi']);
 const picker=document.getElementById('language');
 if(!picker)return;
 const original=new WeakMap(),cache=new Map();
+const CACHE_KEY='cc-translation-cache-v1',CACHE_LIMIT=350;
+try{
+ const stored=JSON.parse(localStorage.getItem(CACHE_KEY)||'[]');
+ if(Array.isArray(stored))for(const entry of stored.slice(-CACHE_LIMIT)){
+  if(Array.isArray(entry)&&typeof entry[0]==='string'&&typeof entry[1]==='string')cache.set(entry[0],entry[1]);
+ }
+}catch(e){console.warn('Cloud Collabo translation cache could not load',e);}
+let cacheSavePending=false;
+function saveTranslationCache(){
+ if(cacheSavePending)return;
+ cacheSavePending=true;
+ setTimeout(()=>{
+  cacheSavePending=false;
+  try{localStorage.setItem(CACHE_KEY,JSON.stringify(Array.from(cache.entries()).slice(-CACHE_LIMIT)));}
+  catch(e){console.warn('Cloud Collabo translation cache could not save',e);}
+ },300);
+}
 let generation=0,scheduled=false,busy=false;
 const skip=new Set(['SCRIPT','STYLE','NOSCRIPT','TEXTAREA','OPTION','CODE','PRE','SVG','TITLE']);
 const known={
@@ -121,7 +138,7 @@ async function run(){
     try{
      const translated=await translateBatch(batch,target);
      if(target!==lang()||version!==generation)return;
-     translated.forEach((t,j)=>{if(typeof t==='string'&&t.trim())cache.set(target+'|'+batch[j],t)});
+     translated.forEach((t,j)=>{if(typeof t==='string'&&t.trim())cache.set(target+'|'+batch[j],t)});saveTranslationCache();
      applyCached();
     }catch(error){console.warn('Cloud Collabo translator:',error);document.dispatchEvent(new CustomEvent('cloudcollabo-translation-error',{detail:{message:String(error)}}));return}
    }
