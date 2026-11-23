@@ -108,7 +108,7 @@ async function run(){
   const pending=needed.filter(text=>!cache.has(target+'|'+text));
   // Translate several batches concurrently instead of waiting for each network round-trip.
   // Keep concurrency bounded to avoid overwhelming the translation endpoint.
-  const batches=[];for(let i=0;i<pending.length;i+=16)batches.push(pending.slice(i,i+16));
+  const batches=[];for(let i=0;i<pending.length;i+=12)batches.push(pending.slice(i,i+12));
   let cursor=0;
   const applyCached=()=>{
    if(target!==lang()||version!==generation)return;
@@ -123,7 +123,7 @@ async function run(){
      if(target!==lang()||version!==generation)return;
      translated.forEach((t,j)=>{if(typeof t==='string'&&t.trim())cache.set(target+'|'+batch[j],t)});
      applyCached();
-    }catch(error){console.warn('Cloud Collabo translator:',error);return}
+    }catch(error){console.warn('Cloud Collabo translator:',error);document.dispatchEvent(new CustomEvent('cloudcollabo-translation-error',{detail:{message:String(error)}}));return}
    }
   };
   await Promise.all(Array.from({length:Math.min(3,batches.length)},()=>worker()));
