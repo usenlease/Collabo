@@ -560,7 +560,12 @@ export default {
     const ready=needs.length>0&&needs.every(n=>applications.filter(a=>a.need_id===n.id).reduce((sum,a)=>sum+Number(a.offered_quantity||1),0)>=Number(n.quantity||1));
     await env.DB.prepare("ALTER TABLE collabo_share_agreement ADD COLUMN contribution_terms_json TEXT").run().catch(e=>{if(!String(e).includes('duplicate column name'))throw e});
     const saved=await env.DB.prepare('SELECT shares_json,contribution_terms_json,updated_at FROM collabo_share_agreement WHERE project_id=?').bind(id).first();
-    if(request.method==='GET')return json({needs,applications,initiator_id:project.owner_clerk_id,ready,shares:saved?JSON.parse(saved.shares_json):null,contribution_terms:saved?.contribution_terms_json?JSON.parse(saved.contribution_terms_json):{},updated_at:saved?.updated_at||null,is_owner:owner});
+    if(request.method==='GET'){
+ const participant_names=Object.create(null);
+ const ids=[...new Set([project.owner_clerk_id,...applications.map(a=>a.applicant_clerk_id)])];
+ if(env.CLERK_SECRET_KEY)for(let i=0;i<ids.length;i+=8)await Promise.all(ids.slice(i,i+8).map(async id=>{try{const response=await fetch('https://api.clerk.com/v1/users/'+encodeURIComponent(id),{headers:{Authorization:'Bearer '+env.CLERK_SECRET_KEY}});if(!response.ok)return;const profile=await response.json();const first=String(profile.first_name||'').trim(),last=String(profile.last_name||'').trim();if(first&&last)participant_names[id]=first+' '+last;}catch{}}));
+ return json({needs,applications,participant_names,initiator_id:project.owner_clerk_id,ready,shares:saved?JSON.parse(saved.shares_json):null,contribution_terms:saved?.contribution_terms_json?JSON.parse(saved.contribution_terms_json):{},updated_at:saved?.updated_at||null,is_owner:owner});
+ }
     if(!owner)return json({error:'Only initiator can propose shares'},403);
     if(!ready)return json({error:'Agreement becomes editable when every required role is filled'},409);
     const data=await body(request),shares=data?.shares,terms=data?.contribution_terms||{};
