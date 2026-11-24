@@ -743,6 +743,20 @@ export default {
      const statements=[];
      if(next==='completed')statements.push(env.DB.prepare("UPDATE role_applications SET status='withdrawn',updated_at=datetime('now') WHERE id=? AND project_id=? AND applicant_clerk_id=? AND status='approved'").bind(exit.application_id,exits[1],exit.applicant_clerk_id));
      statements.push(env.DB.prepare("UPDATE collabo_collaborator_exits SET status=?,initiator_note=?,resolved_at=datetime('now'),resolved_by=? WHERE id=? AND project_id=? AND status='pending'").bind(next,note,user,exits[2],exits[1]));
+     if(next==='completed'){
+      const role=await env.DB.prepare("SELECT n.item_name,a.offered_quantity FROM role_applications a JOIN project_needs n ON n.id=a.need_id WHERE a.id=? AND a.project_id=? AND a.status='approved'").bind(exit.application_id,exits[1]).first();
+      if(!role)return json({error:'Role is no longer approved'},409);
+      let name='A collaborator';
+      if(env.CLERK_SECRET_KEY)try{
+       const response=await fetch('https://api.clerk.com/v1/users/'+encodeURIComponent(exit.applicant_clerk_id),{headers:{Authorization:'Bearer '+env.CLERK_SECRET_KEY}});
+       if(response.ok){const profile=await response.json();const first=String(profile.first_name||'').trim(),last=String(profile.last_name||'').trim();if(first&&last)name=first+' '+last;}
+      }catch{}
+      const message='System notice: '+name+' has left the role of '+role.item_name+'. '+Number(role.offered_quantity||1)+' previously allocated position(s) released. The initiator can review replacement needs.';
+      const messageId=exits[2];
+      // Deterministic chat ID makes concurrent approvals fail atomically rather than duplicate alerts.
+      statements.push(env.DB.prepare("INSERT INTO project_team_messages(id,project_id,sender_clerk_id,body) VALUES(?,?,?,?)").bind(messageId,exits[1],project.owner_clerk_id,message));
+      statements.push(env.DB.prepare("INSERT INTO user_notifications(id,recipient_clerk_id,title,message,link) SELECT lower(hex(randomblob(4))||'-'||hex(randomblob(2))||'-4'||substr(hex(randomblob(2)),2)||'-8'||substr(hex(randomblob(2)),2)||'-'||hex(randomblob(6))),recipient.id,CASE WHEN recipient.id=? THEN 'Role vacancy: replacement needed' ELSE 'Collaborator departure' END,?,? FROM (SELECT DISTINCT applicant_clerk_id AS id FROM role_applications WHERE project_id=? AND status='approved' UNION SELECT ? AS id) recipient").bind(project.owner_clerk_id,message,'#project/'+exits[1],exits[1],project.owner_clerk_id));
+     }
      await env.DB.batch(statements);
      return json({status:next,access_revoked:next==='completed'});
     }
