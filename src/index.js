@@ -32,6 +32,7 @@ const clean=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
 // Public-facing serials are independent of project titles and immutable UUIDs.
 // AUTOINCREMENT prevents reuse after deletion; UNIQUE prevents duplicate assignments.
 async function ensureCollaboSerials(db){
+ await db.prepare("ALTER TABLE projects ADD COLUMN collabo_type TEXT NOT NULL DEFAULT 'partnership'").run().catch(e=>{if(!String(e).includes('duplicate column name'))throw e});
  await db.prepare("CREATE TABLE IF NOT EXISTS collabo_serials (serial INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL UNIQUE)").run();
  await db.prepare("ALTER TABLE collabo_serials ADD COLUMN posting_country TEXT").run().catch(e=>{if(!String(e).includes('duplicate column name'))throw e});
  await db.prepare("INSERT OR IGNORE INTO collabo_serials(project_id) SELECT id FROM projects ORDER BY datetime(created_at),rowid").run();
@@ -106,12 +107,12 @@ export default {
   if(url.pathname==='/api/health'&&request.method==='GET') return json({status:'ok'});
   // Public, read-only discovery. Never expose owner identifiers or private applications.
   if(request.method==='GET' && url.pathname==='/api/public/projects'){
-    try {await ensureCollaboSerials(env.DB);const rows=await env.DB.prepare("SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.status,p.created_at,s.serial,s.posting_country FROM projects p JOIN collabo_serials s ON s.project_id=p.id WHERE p.status='open' ORDER BY s.serial ASC LIMIT 100").all();return json({projects:rows.results.map(p=>({...p,collabo_number:collaboNumber(p.serial,p.posting_country,p.location),serial:undefined,posting_country:undefined}))})}
+    try {await ensureCollaboSerials(env.DB);const rows=await env.DB.prepare("SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.collabo_type,p.status,p.created_at,s.serial,s.posting_country FROM projects p JOIN collabo_serials s ON s.project_id=p.id WHERE p.status='open' ORDER BY s.serial ASC LIMIT 100").all();return json({projects:rows.results.map(p=>({...p,collabo_number:collaboNumber(p.serial,p.posting_country,p.location),serial:undefined,posting_country:undefined}))})}
     catch{return json({error:'Projects temporarily unavailable'},503)}
   }
   const publicDetail=/^\/api\/public\/projects\/([a-f0-9-]{36})$/.exec(url.pathname);
   if(request.method==='GET' && publicDetail){
-    try {await ensureCollaboSerials(env.DB);const p=await env.DB.prepare("SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.status,p.created_at,s.serial,s.posting_country FROM projects p JOIN collabo_serials s ON s.project_id=p.id WHERE p.id=? AND p.status='open'").bind(publicDetail[1]).first();if(!p)return json({error:'Project not found'},404);
+    try {await ensureCollaboSerials(env.DB);const p=await env.DB.prepare("SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.collabo_type,p.status,p.created_at,s.serial,s.posting_country FROM projects p JOIN collabo_serials s ON s.project_id=p.id WHERE p.id=? AND p.status='open'").bind(publicDetail[1]).first();if(!p)return json({error:'Project not found'},404);
       const table=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_needs'").first();
       const needs=table?(await env.DB.prepare("SELECT item_name,quantity,details FROM project_needs WHERE project_id=?").bind(p.id).all()).results:[];
       return json({project:{...p,collabo_number:collaboNumber(p.serial,p.posting_country,p.location),serial:undefined,posting_country:undefined},needs});
@@ -385,7 +386,7 @@ export default {
    }
    if(url.pathname==='/api/my-projects'&&request.method==='GET'){
     const lifecycleTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_lifecycle'").first();
-    const sql=lifecycleTable?"SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.status,p.created_at,p.updated_at,COALESCE(l.stage,CASE WHEN p.status='closed' THEN 'closed' ELSE 'posted' END) AS lifecycle_stage FROM projects p LEFT JOIN project_lifecycle l ON l.project_id=p.id WHERE p.owner_clerk_id=? ORDER BY p.created_at DESC LIMIT 200":"SELECT id,title,description,category,location,collaboration_mode,status,created_at,updated_at,CASE WHEN status='closed' THEN 'closed' ELSE 'posted' END AS lifecycle_stage FROM projects WHERE owner_clerk_id=? ORDER BY created_at DESC LIMIT 200";
+    const sql=lifecycleTable?"SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.collabo_type,p.status,p.created_at,p.updated_at,COALESCE(l.stage,CASE WHEN p.status='closed' THEN 'closed' ELSE 'posted' END) AS lifecycle_stage FROM projects p LEFT JOIN project_lifecycle l ON l.project_id=p.id WHERE p.owner_clerk_id=? ORDER BY p.created_at DESC LIMIT 200":"SELECT id,title,description,category,location,collaboration_mode,status,created_at,updated_at,CASE WHEN status='closed' THEN 'closed' ELSE 'posted' END AS lifecycle_stage FROM projects WHERE owner_clerk_id=? ORDER BY created_at DESC LIMIT 200";
     const rows=await env.DB.prepare(sql).bind(user).all();
     return json({projects:rows.results,lifecycle_editable:!!lifecycleTable});
    }
@@ -426,7 +427,7 @@ export default {
    }
    if(url.pathname==='/api/projects'&&request.method==='GET'){
     await ensureCollaboSerials(env.DB);
-    const rows=await env.DB.prepare("SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.status,p.created_at,s.serial,s.posting_country,CASE WHEN p.owner_clerk_id=? THEN 1 ELSE 0 END AS is_owner FROM projects p JOIN collabo_serials s ON s.project_id=p.id WHERE p.status='open' ORDER BY s.serial ASC LIMIT 100").bind(user).all();
+    const rows=await env.DB.prepare("SELECT p.id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.collabo_type,p.status,p.created_at,s.serial,s.posting_country,CASE WHEN p.owner_clerk_id=? THEN 1 ELSE 0 END AS is_owner FROM projects p JOIN collabo_serials s ON s.project_id=p.id WHERE p.status='open' ORDER BY s.serial ASC LIMIT 100").bind(user).all();
     return json({projects:rows.results.map(p=>({...p,collabo_number:collaboNumber(p.serial,p.posting_country,p.location)}))});
    }
    if(url.pathname==='/api/projects'&&request.method==='POST'){
@@ -440,7 +441,8 @@ export default {
     const id=/^[a-f0-9-]{36}$/.test(b.client_project_id||'')?b.client_project_id:crypto.randomUUID();
     const existing=await env.DB.prepare('SELECT id,owner_clerk_id FROM projects WHERE id=?').bind(id).first();
     if(existing){if(existing.owner_clerk_id!==user)return json({error:'Project identifier conflict'},409);await ensureCollaboSerials(env.DB);const serial=await env.DB.prepare('SELECT serial,posting_country FROM collabo_serials WHERE project_id=?').bind(id).first();return json({id,collabo_number:collaboNumber(serial?.serial,serial?.posting_country,b.location),already_published:true},200)}
-    const statements=[env.DB.prepare('INSERT INTO projects(id,owner_clerk_id,title,description,category,location,collaboration_mode) VALUES(?,?,?,?,?,?,?)').bind(id,user,clean(b.title,160),clean(b.description,5000),clean(b.category,80)||'Other',clean(b.location,160),mode)];
+    const type=b.collabo_type==='hiring'?'hiring':'partnership';
+    const statements=[env.DB.prepare('INSERT INTO projects(id,owner_clerk_id,title,description,category,location,collaboration_mode,collabo_type) VALUES(?,?,?,?,?,?,?,?)').bind(id,user,clean(b.title,160),clean(b.description,5000),clean(b.category,80)||'Other',clean(b.location,160),mode,type)];
     for(let i=0;i<needs.length;i++)statements.push(env.DB.prepare('INSERT INTO project_needs(id,project_id,position,item_name,quantity,details) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),id,i+1,clean(needs[i].item_name,120),needs[i].quantity,clean(needs[i].details,1000)));
     await env.DB.batch(statements);
     await ensureCollaboSerials(env.DB);
@@ -451,7 +453,7 @@ export default {
    const match=/^\/api\/projects\/([a-f0-9-]{36})$/.exec(url.pathname);
    if(match&&request.method==='GET'){
     await ensureCollaboSerials(env.DB);
-    const row=await env.DB.prepare('SELECT p.id,p.owner_clerk_id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.status,p.created_at,s.serial,s.posting_country FROM projects p JOIN collabo_serials s ON s.project_id=p.id WHERE p.id=?').bind(match[1]).first();
+    const row=await env.DB.prepare('SELECT p.id,p.owner_clerk_id,p.title,p.description,p.category,p.location,p.collaboration_mode,p.collabo_type,p.status,p.created_at,s.serial,s.posting_country FROM projects p JOIN collabo_serials s ON s.project_id=p.id WHERE p.id=?').bind(match[1]).first();
     if(!row)return json({error:'Not found'},404);
     return json({project:{...row,collabo_number:collaboNumber(row.serial,row.posting_country,row.location),serial:undefined,is_owner:row.owner_clerk_id===user,owner_clerk_id:undefined}});
    }
@@ -549,6 +551,8 @@ export default {
    const agreementRoute=/^\/api\/projects\/([a-f0-9-]{36})\/share-agreement$/.exec(url.pathname);
    if(agreementRoute&&['GET','PUT'].includes(request.method)){
     const id=agreementRoute[1];
+    await ensureCollaboSerials(env.DB);
+    if((await env.DB.prepare('SELECT collabo_type FROM projects WHERE id=?').bind(id).first())?.collabo_type==='hiring')return json({error:'Hiring Collabos do not use profit sharing'},409);
     const project=await env.DB.prepare('SELECT id,owner_clerk_id,status FROM projects WHERE id=?').bind(id).first();
     if(!project)return json({error:'Project not found'},404);
     const owner=project.owner_clerk_id===user;
